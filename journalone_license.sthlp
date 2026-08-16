@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.2.0 16aug2026}{...}
+{* *! version 0.2.1 16aug2026}{...}
 {title:Title}
 
 {phang}
@@ -20,8 +20,9 @@ JournalOne authorization.  {cmd:activate()} validates the supplied key
 against the publisher's private-key allowlist and writes a small local
 license file in {cmd:c(sysdir_personal)}.  The plaintext key is not written
 to that file and is not included in {cmd:journalone.pkg}.  The publisher can
-issue different keys to different users (for example, {cmd:xmsz000} and
-{cmd:xmsz001}); each key is checked independently.{p_end}
+issue different keys to different users.  Documentation uses the deliberately
+invalid placeholders {cmd:DEMO-NOT-A-KEY-A} and {cmd:DEMO-NOT-A-KEY-B}; each
+real key is checked independently.{p_end}
 
 {pstd}
 Without a valid activation, the public commands {cmd:journalone},
@@ -40,15 +41,15 @@ successful check, and never writes the plaintext key into analysis outputs.{p_en
 {title:Publisher workflow}
 
 {pstd}
-The publisher may issue multiple custom keys, such as {cmd:xmsz000} and
-{cmd:xmsz001}. Keep the keys in the private Excel workbook
+The publisher may issue multiple custom keys. Never place a real key in public
+documentation or source code. Keep the keys in the private Excel workbook
 {cmd:journalone_private_keys.xlsx} outside the package. The worksheet
 {cmd:License Keys} uses the columns
 {cmd:key,user_id,status,issued_on,note}; then run the publisher-only
 {cmd:build_license_allowlist.do} helper. Only active rows are authorized.
 Only digest values are written into the public package. In offline mode a
 changed registry requires rebuilding and republishing the package; use long,
-random keys for real users rather than the short examples above.{p_end}
+random keys for real users rather than short or predictable examples.{p_end}
 
 {title:Security scope}
 
@@ -58,5 +59,5 @@ plain text; a technically determined recipient can edit local ado code and
 bypass any fully offline check.  Strong enforcement requires a compiled
 component or an online license service controlled by the author.  In offline
 mode, adding a new key requires rebuilding the digest allowlist and publishing
-the updated package; use long random keys rather than easy-to-guess examples
-such as {cmd:xmsz000}.{p_end}
+the updated package; use long random keys and keep every real key out of public
+documentation, examples, logs, and generated output.{p_end}
