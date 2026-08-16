@@ -1,0 +1,437 @@
+/* journalone_prep.dlg - native Stata single-page preprocessing dialog */
+VERSION 15.0
+POSITION 0 0 1020 650
+
+DIALOG main, title("一键数据清洗")
+BEGIN
+    GROUPBOX gb_import 15 15 490 125, label("导入与合并")
+    TEXT tx_mergefile 30 45 75 ., label("导入文件：")
+    FILE fi_mergefile 110 @ 365 ., defext(dta) ///
+        filter("Stata数据文件 (*.dta)|*.dta|所有文件 (*.*)|*.*") ///
+        label("浏览...") tooltip("可选：选择要与当前主数据按键合并的 .dta 文件")
+    TEXT tx_mergekey 30 82 75 ., label("关联变量：")
+    VARLIST vl_mergekey 110 @ 190 ., ///
+        tooltip("主数据与外部数据中名称相同的关联键；支持多个变量")
+    TEXT tx_mergetype 305 @ 70 ., label("合并关系：")
+    COMBOBOX cb_mergetype 380 @ 105 ., dropdownlist contents(merge_list)
+    TEXT tx_merge_note 30 112 445 20, ///
+        label("留空不合并；保留主数据与匹配记录，using-only 记录写入样本流后排除。")
+
+    GROUPBOX gb_audit 15 150 490 175, label("审计、面板结构与研究样本")
+    TEXT tx_vars 30 180 75 ., label("分析变量：")
+    VARLIST vl_vars 110 @ 365 ., ///
+        tooltip("留空审计全部变量；支持数值变量和字符串变量")
+    TEXT tx_id 30 217 75 ., label("个体ID：")
+    VARNAME vn_id 110 @ 130 ., tooltip("企业、个人、城市等主体；截面数据可留空")
+    TEXT tx_time 250 @ 70 ., label("时间变量：")
+    VARNAME vn_time 325 @ 160 ., numeric ///
+        tooltip("年份、季度或其他数值型时间变量；截面数据可留空")
+    TEXT tx_keep 30 254 75 ., label("保留条件：")
+    EDIT ed_keep 110 @ 365 ., ///
+        tooltip("例如 year>=2010 & year<=2025；留空保留全部观测")
+    TEXT tx_audit_note 30 290 445 20, ///
+        label("自动检查变量、ID×时间重复和面板期数；筛选仅作用于输出副本。")
+
+    GROUPBOX gb_dupmiss 15 335 490 205, label("重复值与缺失值处理")
+    TEXT tx_dup_method 30 365 75 ., label("重复处理：")
+    COMBOBOX cb_dup 110 @ 155 ., dropdownlist contents(dup_list) ///
+        tooltip("默认仅报告；删除操作必须显式选择")
+    TEXT tx_dup_key 275 @ 65 ., label("重复键：")
+    VARLIST vl_dup_key 345 @ 140 ., ///
+        tooltip("按键保留首条/末条时必填，例如 firm_id year")
+    TEXT tx_miss_method 30 403 75 ., label("缺失处理：")
+    COMBOBOX cb_miss 110 @ 155 ., dropdownlist contents(miss_list) ///
+        tooltip("均值和中位数插补只接受数值变量")
+    TEXT tx_miss_vars 275 @ 65 ., label("处理变量：")
+    VARLIST vl_miss_vars 345 @ 140 ., ///
+        tooltip("删除或插补时必填；仅报告时留空使用分析变量")
+    TEXT tx_miss_by 30 441 75 ., label("分组依据：")
+    VARLIST vl_miss_by 110 @ 155 ., ///
+        tooltip("例如 industry year；组内不可用时回退到全样本统计量")
+    TEXT tx_miss_note 275 441 210 70, ///
+        label("插补生成 mi_/m_，不覆盖原变量。")
+
+    GROUPBOX gb_output 15 550 490 95, label("输出与复现")
+    TEXT tx_outdir 30 580 75 ., label("输出目录：")
+    EDIT ed_outdir 110 @ 220 ., default("journalone_prep_output") ///
+        tooltip("可填写相对当前目录的路径或绝对路径")
+    TEXT tx_prefix 340 @ 55 ., label("前缀：")
+    EDIT ed_prefix 400 @ 85 ., default("prep")
+    CHECKBOX ck_save 30 617 235 ., label("保存清洗后的数据副本 (.dta)") default(1)
+    TEXT tx_license 660 18 45 ., label("密钥：")
+    EDIT ed_license 710 @ 165 ., nomemory password max(64) ///
+        tooltip("首次使用时输入发布者提供的授权密钥；验证成功后本机留空也可运行")
+    BUTTON bu_update 890 18 105 ., label("一键更新") ///
+        onpush(program oneclick_update)
+
+    GROUPBOX gb_transform 515 15 490 385, label("数据处理")
+    TEXT tx_recode_var 530 45 85 ., label("取值转换：")
+    VARNAME vn_recode 625 @ 100 ., tooltip("选择要转换指定取值的变量")
+    TEXT tx_recode_from 735 @ 40 ., label("原值：")
+    EDIT ed_recode_from 775 @ 55 ., tooltip("数值或文字")
+    TEXT tx_recode_to 840 @ 40 ., label("新值：")
+    EDIT ed_recode_to 880 @ 110 ., tooltip("转换后的数值或文字")
+
+    TEXT tx_out_method 530 85 85 ., label("异常处理：")
+    COMBOBOX cb_out 625 @ 150 ., dropdownlist contents(out_list) ///
+        tooltip("默认仅报告；替换原值也只发生在输出副本中")
+    TEXT tx_out_vars 790 @ 70 ., label("数值变量：")
+    VARLIST vl_out_vars 865 @ 130 ., numeric ///
+        tooltip("执行缩尾或截尾时必填")
+    TEXT tx_out_by 530 122 85 ., label("分组依据：")
+    VARLIST vl_out_by 625 @ 150 ., ///
+        tooltip("例如 industry year；留空按全样本计算分位点")
+    TEXT tx_low 790 @ 45 ., label("下分位：")
+    EDIT ed_low 840 @ 45 ., default("1") numonly
+    TEXT tx_high 900 @ 45 ., label("上分位：")
+    EDIT ed_high 950 @ 45 ., default("99") numonly
+    TEXT tx_out_note 530 155 455 35, ///
+        label("默认分位点为1%和99%；可生成 w_新变量、替换输出副本或删除异常行。")
+
+    TEXT tx_log 530 205 85 ., label("对数变量：")
+    VARLIST vl_log 625 @ 150 ., numeric ///
+        tooltip("生成 ln_原变量；非定义域值转为缺失并计入审计")
+    TEXT tx_logmode 790 @ 70 ., label("对数形式：")
+    COMBOBOX cb_logmode 865 @ 130 ., dropdownlist contents(log_list)
+    TEXT tx_z 530 245 85 ., label("Z标准化：")
+    VARLIST vl_z 625 @ 150 ., numeric tooltip("生成 z_原变量")
+    TEXT tx_encode 790 @ 70 ., label("分类编码：")
+    VARLIST vl_encode 865 @ 130 ., string ///
+        tooltip("用 encode 生成 cat_原变量并保留值标签")
+    TEXT tx_destring 530 285 85 ., label("数字化：")
+    VARLIST vl_destring 625 @ 150 ., string ///
+        tooltip("严格 destring，生成 num_原变量；含非法字符时停止")
+    TEXT tx_transform_note 790 282 205 45, ///
+        label("常数变量无法标准化时生成缺失并警告。")
+    TEXT tx_names 530 350 455 25, ///
+        label("生成变量：mi_ / m_ / w_ / ln_ / z_ / cat_ / num_；原变量默认保留。")
+
+    GROUPBOX gb_sample 515 410 490 235, label("样本筛选与删除")
+    TEXT tx_rule_header 530 440 455 20, label("每条规则可单独填写：变量 + 运算符 + 值")
+    TEXT tx_rule1 530 468 45 ., label("规则1：")
+    VARNAME vn_drop1 580 @ 115 ., tooltip("选择要判断的变量")
+    COMBOBOX cb_dropop1 705 @ 120 ., dropdownlist contents(drop_operator_list)
+    EDIT ed_dropvalue1 835 @ 150 ., ///
+        tooltip("等于、大于等运算符填写值；缺失/非缺失留空")
+    TEXT tx_rule2 530 505 45 ., label("规则2：")
+    VARNAME vn_drop2 580 @ 115 ., tooltip("可单独填写第二条规则")
+    COMBOBOX cb_dropop2 705 @ 120 ., dropdownlist contents(drop_operator_list)
+    EDIT ed_dropvalue2 835 @ 150 ., ///
+        tooltip("等于、大于等运算符填写值；缺失/非缺失留空")
+    TEXT tx_rule3 530 542 45 ., label("规则3：")
+    VARNAME vn_drop3 580 @ 115 ., tooltip("可单独填写第三条规则")
+    COMBOBOX cb_dropop3 705 @ 120 ., dropdownlist contents(drop_operator_list)
+    EDIT ed_dropvalue3 835 @ 150 ., ///
+        tooltip("等于、大于等运算符填写值；缺失/非缺失留空")
+    TEXT tx_dropif 530 582 65 ., label("自由条件：")
+    EDIT ed_dropif 600 @ 385 ., ///
+        tooltip("填写要删除的 Stata 条件，例如 year<2010 | missing(industry)")
+    TEXT tx_sample_note 530 618 455 25, ///
+        label("规则按顺序执行；若删除全部观测则停止，并自动恢复原始内存数据。")
+END
+
+SUBMIT sub1, label("运行并导出")
+HELP hlp1, view("help journalone_prep")
+RESET res1
+
+PROGRAM oneclick_update
+BEGIN
+    put "journalone_update"
+    stata hidden immediate
+    if _rc {
+        stopbox stop "更新失败；请检查网络或插件发布地址。"
+    }
+    else {
+        stopbox note "更新完成。重新打开插件即可使用新版。"
+        close
+    }
+END
+
+PROGRAM command
+BEGIN
+    if main.ed_license.isneq("") {
+        put "journalone_license, activate(" `"""' main.ed_license `"""' ")"
+        stata hidden immediate
+        if _rc {
+            stopbox stop "授权密钥无效；请向插件发布者获取正确密钥。"
+        }
+        call main.ed_license.setvalue ""
+    }
+    put "journalone_prep,"
+
+    if main.fi_mergefile {
+        put " mergefile(" `"""' main.fi_mergefile `"""' ")"
+        if main.vl_mergekey.isneq("") {
+            put " mergekey("
+            put main.vl_mergekey
+            put ")"
+        }
+        put " mergetype("
+        if main.cb_mergetype.iseq("一对一（1:1）") {
+            put "1:1"
+        }
+        if main.cb_mergetype.iseq("多对一（m:1）") {
+            put "m:1"
+        }
+        if main.cb_mergetype.iseq("一对多（1:m）") {
+            put "1:m"
+        }
+        put ")"
+    }
+
+    if main.vl_vars.isneq("") {
+        put " vars("
+        put main.vl_vars
+        put ")"
+    }
+    if main.vn_id.isneq("") {
+        put " idvar("
+        put main.vn_id
+        put ")"
+    }
+    if main.vn_time.isneq("") {
+        put " timevar("
+        put main.vn_time
+        put ")"
+    }
+    if main.ed_keep.isneq("") {
+        put " keepif("
+        put main.ed_keep
+        put ")"
+    }
+
+    if main.vn_recode.isneq("") {
+        put " recodevar("
+        put main.vn_recode
+        put ") recodefrom(" `"""' main.ed_recode_from `"""' ") recodeto(" `"""' main.ed_recode_to `"""' ")"
+    }
+
+    put " dupmethod("
+    if main.cb_dup.iseq("仅报告（不删除）") {
+        put "report"
+    }
+    if main.cb_dup.iseq("删除完全重复记录") {
+        put "exact"
+    }
+    if main.cb_dup.iseq("按键保留首条") {
+        put "keyfirst"
+    }
+    if main.cb_dup.iseq("按键保留末条") {
+        put "keylast"
+    }
+    put ")"
+    if main.vl_dup_key.isneq("") {
+        put " dupkey("
+        put main.vl_dup_key
+        put ")"
+    }
+
+    put " missmethod("
+    if main.cb_miss.iseq("仅报告（不修改）") {
+        put "report"
+    }
+    if main.cb_miss.iseq("完整案例删除") {
+        put "drop"
+    }
+    if main.cb_miss.iseq("均值插补（生成新变量）") {
+        put "mean"
+    }
+    if main.cb_miss.iseq("中位数插补（生成新变量）") {
+        put "median"
+    }
+    put ")"
+    if main.vl_miss_vars.isneq("") {
+        put " missvars("
+        put main.vl_miss_vars
+        put ")"
+    }
+    if main.vl_miss_by.isneq("") {
+        put " missby("
+        put main.vl_miss_by
+        put ")"
+    }
+
+    put " outmethod("
+    if main.cb_out.iseq("仅报告（不修改）") {
+        put "report"
+    }
+    if main.cb_out.iseq("缩尾并生成新变量") {
+        put "winsor"
+    }
+    if main.cb_out.iseq("缩尾并替换输出副本") {
+        put "winsorreplace"
+    }
+    if main.cb_out.iseq("截尾并删除异常行") {
+        put "trim"
+    }
+    put ")"
+    if main.vl_out_vars.isneq("") {
+        put " outvars("
+        put main.vl_out_vars
+        put ")"
+    }
+    if main.vl_out_by.isneq("") {
+        put " outby("
+        put main.vl_out_by
+        put ")"
+    }
+    if main.ed_low.isneq("") {
+        put " plow("
+        put main.ed_low
+        put ")"
+    }
+    if main.ed_high.isneq("") {
+        put " phigh("
+        put main.ed_high
+        put ")"
+    }
+
+    if main.vl_log.isneq("") {
+        put " logvars("
+        put main.vl_log
+        put ") logmode("
+        if main.cb_logmode.iseq("ln(x)，仅 x>0") {
+            put "ln"
+        }
+        if main.cb_logmode.iseq("ln(1+x)，仅 x>-1") {
+            put "ln1p"
+        }
+        put ")"
+    }
+    if main.vl_z.isneq("") {
+        put " zvars("
+        put main.vl_z
+        put ")"
+    }
+    if main.vl_encode.isneq("") {
+        put " encodevars("
+        put main.vl_encode
+        put ")"
+    }
+    if main.vl_destring.isneq("") {
+        put " destringvars("
+        put main.vl_destring
+        put ")"
+    }
+
+    if main.vn_drop1.isneq("") & !main.cb_dropop1.iseq("不使用") {
+        put " dropvar1("
+        put main.vn_drop1
+        put ") dropop1("
+        if main.cb_dropop1.iseq("等于 (=)") put "=="
+        if main.cb_dropop1.iseq("不等于 (!=)") put "!="
+        if main.cb_dropop1.iseq("大于 (>)") put ">"
+        if main.cb_dropop1.iseq("大于等于 (>=)") put ">="
+        if main.cb_dropop1.iseq("小于 (<)") put "<"
+        if main.cb_dropop1.iseq("小于等于 (<=)") put "<="
+        if main.cb_dropop1.iseq("缺失") put "missing"
+        if main.cb_dropop1.iseq("非缺失") put "nonmissing"
+        put ")"
+        if !main.cb_dropop1.iseq("缺失") & !main.cb_dropop1.iseq("非缺失") {
+            put " dropvalue1(" `"""' main.ed_dropvalue1 `"""' ")"
+        }
+    }
+    if main.vn_drop2.isneq("") & !main.cb_dropop2.iseq("不使用") {
+        put " dropvar2("
+        put main.vn_drop2
+        put ") dropop2("
+        if main.cb_dropop2.iseq("等于 (=)") put "=="
+        if main.cb_dropop2.iseq("不等于 (!=)") put "!="
+        if main.cb_dropop2.iseq("大于 (>)") put ">"
+        if main.cb_dropop2.iseq("大于等于 (>=)") put ">="
+        if main.cb_dropop2.iseq("小于 (<)") put "<"
+        if main.cb_dropop2.iseq("小于等于 (<=)") put "<="
+        if main.cb_dropop2.iseq("缺失") put "missing"
+        if main.cb_dropop2.iseq("非缺失") put "nonmissing"
+        put ")"
+        if !main.cb_dropop2.iseq("缺失") & !main.cb_dropop2.iseq("非缺失") {
+            put " dropvalue2(" `"""' main.ed_dropvalue2 `"""' ")"
+        }
+    }
+    if main.vn_drop3.isneq("") & !main.cb_dropop3.iseq("不使用") {
+        put " dropvar3("
+        put main.vn_drop3
+        put ") dropop3("
+        if main.cb_dropop3.iseq("等于 (=)") put "=="
+        if main.cb_dropop3.iseq("不等于 (!=)") put "!="
+        if main.cb_dropop3.iseq("大于 (>)") put ">"
+        if main.cb_dropop3.iseq("大于等于 (>=)") put ">="
+        if main.cb_dropop3.iseq("小于 (<)") put "<"
+        if main.cb_dropop3.iseq("小于等于 (<=)") put "<="
+        if main.cb_dropop3.iseq("缺失") put "missing"
+        if main.cb_dropop3.iseq("非缺失") put "nonmissing"
+        put ")"
+        if !main.cb_dropop3.iseq("缺失") & !main.cb_dropop3.iseq("非缺失") {
+            put " dropvalue3(" `"""' main.ed_dropvalue3 `"""' ")"
+        }
+    }
+    if main.ed_dropif.isneq("") {
+        put " dropif("
+        put main.ed_dropif
+        put ")"
+    }
+
+    if main.ed_outdir.isneq("") {
+        put " outdir("
+        put main.ed_outdir
+        put ")"
+    }
+    if main.ed_prefix.isneq("") {
+        put " prefix("
+        put main.ed_prefix
+        put ")"
+    }
+    if main.ck_save {
+        put " saveclean"
+    }
+END
+
+LIST dup_list
+BEGIN
+    仅报告（不删除）
+    删除完全重复记录
+    按键保留首条
+    按键保留末条
+END
+
+LIST miss_list
+BEGIN
+    仅报告（不修改）
+    完整案例删除
+    均值插补（生成新变量）
+    中位数插补（生成新变量）
+END
+
+LIST out_list
+BEGIN
+    仅报告（不修改）
+    缩尾并生成新变量
+    缩尾并替换输出副本
+    截尾并删除异常行
+END
+
+LIST log_list
+BEGIN
+    ln(x)，仅 x>0
+    ln(1+x)，仅 x>-1
+END
+
+LIST merge_list
+BEGIN
+    一对一（1:1）
+    多对一（m:1）
+    一对多（1:m）
+END
+
+LIST drop_operator_list
+BEGIN
+    不使用
+    等于 (=)
+    不等于 (!=)
+    大于 (>)
+    大于等于 (>=)
+    小于 (<)
+    小于等于 (<=)
+    缺失
+    非缺失
+END

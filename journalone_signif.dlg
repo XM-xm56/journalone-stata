@@ -1,0 +1,246 @@
+/* journalone_signif.dlg - transparent significance-combination diagnostics */
+VERSION 15.0
+POSITION 0 0 1020 650
+
+DIALOG combo_main, title("显著组合") tabtitle("显著组合")
+BEGIN
+    TEXT tx_select 20 10 90 ., label("模型选择：")
+    COMBOBOX cb_select 120 @ 180 ., dropdownlist contents(select_list) ///
+        tooltip("仅运行预先填写的规格组合；不自动反复试错以追求显著")
+    TEXT tx_key 330 @ 45 ., label("密钥：")
+    EDIT ed_key 375 @ 145 ., nomemory password max(64) ///
+        tooltip("首次使用时输入发布者提供的授权密钥；验证成功后本机留空也可运行")
+    BUTTON bu_update 880 10 115 ., label("一键更新") ///
+        onpush(program oneclick_update)
+
+    GROUPBOX gb_base 15 42 990 175, label("基准回归")
+    TEXT tx_y 30 68 110 ., label("被解释变量：")
+    VARNAME vn_y 150 @ 180 ., numeric
+    TEXT tx_x 360 @ 90 ., label("解释变量：")
+    VARLIST vl_x 455 @ 220 ., numeric fv ts allowcat
+    TEXT tx_vce 700 @ 90 ., label("标准误：")
+    COMBOBOX cb_vce 800 @ 180 ., dropdownlist contents(vce_list)
+    TEXT tx_fe 30 101 110 ., label("固定效应：")
+    VARLIST vl_fe 150 @ 220 ., numeric
+    TEXT tx_cluster 400 @ 90 ., label("聚类变量：")
+    VARNAME vn_cluster 500 @ 180 ., numeric
+    TEXT tx_panel 700 @ 90 ., label("面板ID：")
+    VARNAME vn_panel 800 @ 180 ., numeric
+    TEXT tx_keep 30 134 110 ., label("必留控制：")
+    VARLIST vl_keep 150 @ 830 ., numeric fv ts allowcat
+    TEXT tx_candidate 30 167 110 ., label("候选控制：")
+    VARLIST vl_candidate 150 @ 830 ., numeric fv ts allowcat
+    TEXT tx_time 700 @ 90 ., label("时间变量：")
+    VARNAME vn_time 800 @ 180 ., numeric
+    TEXT tx_base_note 30 198 945 ., ///
+        label("必留控制始终保留；候选控制只按预先定义的规格逐项加入并完整记录。")
+
+    GROUPBOX gb_robust 15 225 990 195, label("稳健性检验（按填写项运行）")
+    TEXT tx_altx 30 249 110 ., label("替换解释变量：")
+    VARLIST vl_altx 150 @ 180 ., numeric fv ts allowcat
+    TEXT tx_alty 355 @ 110 ., label("替换被解释变量：")
+    VARLIST vl_alty 475 @ 180 ., numeric
+    TEXT tx_lags 680 @ 110 ., label("滞后期数：")
+    EDIT ed_lags 800 @ 60 ., numonly tooltip("例如 1 2；需数据已设定面板结构")
+    TEXT tx_leads 30 280 110 ., label("滞前期数：")
+    EDIT ed_leads 150 @ 60 ., numonly tooltip("例如 1 2；需数据已设定面板结构")
+    TEXT tx_subsample 235 @ 110 ., label("调整样本区间：")
+    EDIT ed_subsample 355 @ 300 ., tooltip("例如 year>=2015 & year<=2024")
+    TEXT tx_altvce 30 311 110 ., label("替换稳健标准误：")
+    COMBOBOX cb_altvce 150 @ 180 ., dropdownlist contents(altvce_list)
+    TEXT tx_addfe 355 @ 110 ., label("额外固定效应：")
+    VARLIST vl_addfe 475 @ 180 ., numeric
+    TEXT tx_policy 680 @ 110 ., label("政策前后期数：")
+    EDIT ed_policy 800 @ 180 ., tooltip("仅记录预设窗口，例如 2 2")
+    TEXT tx_addcontrols 30 342 110 ., label("额外控制变量：")
+    VARLIST vl_addcontrols 150 @ 180 ., numeric fv ts allowcat
+    TEXT tx_ptrend 355 @ 110 ., label("平行趋势检验：")
+    CHECKBOX ck_ptrend 475 @ 180 ., label("运行")
+    TEXT tx_placebo 680 @ 110 ., label("安慰剂检验：")
+    EDIT ed_placebo 800 @ 180 ., tooltip("仅记录预设安慰剂方案")
+    TEXT tx_altmodel 30 373 110 ., label("更换基准模型：")
+    COMBOBOX cb_altmodel 150 @ 180 ., dropdownlist contents(model_list)
+    TEXT tx_robust_note 355 @ 600 ., ///
+        label("空白项跳过；平行趋势、政策窗口和安慰剂设置会写入审计说明，不会被静默解释为显著。")
+
+    GROUPBOX gb_mech 15 428 990 65, label("机制检验")
+    TEXT tx_mediator 30 451 110 ., label("中介变量：")
+    VARLIST vl_mediator 150 @ 250 ., numeric
+    TEXT tx_moderator 500 @ 110 ., label("调节变量：")
+    VARLIST vl_moderator 620 @ 250 ., numeric
+    TEXT tx_mech_note 30 475 945 ., label("按预设路径输出全部系数。")
+
+    GROUPBOX gb_hetero 15 501 990 85, label("异质性分析")
+    TEXT tx_group 30 524 110 ., label("分组变量：")
+    VARNAME vn_group 150 @ 180 ., numeric
+    TEXT tx_dimension 355 @ 110 ., label("分组维度：")
+    EDIT ed_dimension 475 @ 150 ., tooltip("例如 1/2；仅作为审计标签")
+    TEXT tx_hety 30 553 110 ., label("被解释变量：")
+    VARNAME vn_hety 150 @ 180 ., numeric
+    TEXT tx_hetx 355 @ 110 ., label("解释变量：")
+    VARLIST vl_hetx 475 @ 300 ., numeric fv ts allowcat
+    TEXT tx_hetero_note 30 575 945 ., ///
+        label("分组回归与组间差异均保留在结果文件中；不会只输出显著组。")
+
+    TEXT tx_output 30 605 110 ., label("输出目录：")
+    EDIT ed_output 150 @ 300 ., default("显著组合结果")
+    TEXT tx_prefix 500 @ 55 ., label("前缀：")
+    EDIT ed_prefix 560 @ 180 ., default("显著组合")
+    TEXT tx_safe_note 760 @ 220 ., label("原始内存数据不改写。")
+END
+
+DIALOG combo_more, tabtitle("更多选项")
+BEGIN
+    GROUPBOX gb_expect 15 15 990 310, label("基础选项")
+    TEXT tx_xy 30 42 145 ., label("X对Y预期方向：")
+    COMBOBOX cb_xy 178 @ 180 ., dropdownlist contents(direction_list)
+    TEXT tx_xm 30 80 145 ., label("X对M预期方向：")
+    COMBOBOX cb_xm 178 @ 180 ., dropdownlist contents(direction_list)
+    TEXT tx_xwy 30 118 145 ., label("X*W对Y预期方向：")
+    COMBOBOX cb_xwy 178 @ 180 ., dropdownlist contents(direction_list)
+    TEXT tx_baselevel 30 156 145 ., label("基准回归置信区间：")
+    COMBOBOX cb_baselevel 178 @ 180 ., dropdownlist contents(ci_list)
+    TEXT tx_medlevel 30 194 145 ., label("中介效应置信区间：")
+    COMBOBOX cb_medlevel 178 @ 180 ., dropdownlist contents(ci_list)
+    TEXT tx_modlevel 30 232 145 ., label("调节效应置信区间：")
+    COMBOBOX cb_modlevel 178 @ 180 ., dropdownlist contents(ci_list)
+    TEXT tx_mincontrols 30 270 145 ., label("至少保留多少控制变量：")
+    EDIT ed_mincontrols 178 @ 180 ., default("1") numonly
+    TEXT tx_expect_note 30 315 945 ., ///
+        label("方向和置信区间只用于预先登记与结果标注；程序不会根据p值删除规格或变量。")
+    TEXT tx_definition 30 355 945 ., ///
+        label("注：Y是被解释变量，X是解释变量，W是调节变量，M是中介变量。")
+END
+
+SUBMIT sub1, label("运行显著组合诊断")
+HELP hlp1, view("help journalone_signif")
+RESET res1
+
+PROGRAM oneclick_update
+BEGIN
+    put "journalone_update"
+    stata hidden immediate
+    if _rc {
+        stopbox stop "更新失败；请检查网络或插件发布地址。"
+    }
+    else {
+        stopbox note "更新完成。重新打开插件即可使用新版。"
+        close
+    }
+END
+
+PROGRAM command
+BEGIN
+    if combo_main.ed_key.isneq("") {
+        put "journalone_license, activate(" `"""' combo_main.ed_key `"""' ")"
+        stata hidden immediate
+        if _rc {
+            stopbox stop "授权密钥无效；请向插件发布者获取正确密钥。"
+        }
+        call combo_main.ed_key.setvalue ""
+    }
+    put "journalone_signif,"
+    if combo_main.cb_select.iseq("分析不显著原因") put " select(reason)"
+    if combo_main.cb_select.iseq("查找显著组合") put " select(grid)"
+    if combo_main.vn_y.isneq("") put " depvar(" /hidden combo_main.vn_y ")"
+    if combo_main.vl_x.isneq("") put " core(" /hidden combo_main.vl_x ")"
+    if combo_main.vl_fe.isneq("") put " fe(" /hidden combo_main.vl_fe ")"
+    if combo_main.vn_cluster.isneq("") put " cluster(" /hidden combo_main.vn_cluster ")"
+    if combo_main.vn_panel.isneq("") put " panel(" /hidden combo_main.vn_panel ")"
+    if combo_main.vn_time.isneq("") put " time(" /hidden combo_main.vn_time ")"
+    put " vce("
+    if combo_main.cb_vce.iseq("常规标准误") put "conventional"
+    if combo_main.cb_vce.iseq("异方差稳健") put "robust"
+    if combo_main.cb_vce.iseq("聚类稳健") put "cluster"
+    put ")"
+    if combo_main.vl_keep.isneq("") put " keepcontrols(" /hidden combo_main.vl_keep ")"
+    if combo_main.vl_candidate.isneq("") put " candidates(" /hidden combo_main.vl_candidate ")"
+    if combo_main.vl_altx.isneq("") put " altx(" /hidden combo_main.vl_altx ")"
+    if combo_main.vl_alty.isneq("") put " alty(" /hidden combo_main.vl_alty ")"
+    if combo_main.ed_lags.isneq("") put " lags(" combo_main.ed_lags ")"
+    if combo_main.ed_leads.isneq("") put " leads(" combo_main.ed_leads ")"
+    if combo_main.ed_subsample.isneq("") put " subsample(" combo_main.ed_subsample ")"
+    if !combo_main.cb_altvce.iseq("不运行") {
+        put " altvce("
+        if combo_main.cb_altvce.iseq("常规标准误") put "conventional"
+        if combo_main.cb_altvce.iseq("异方差稳健") put "robust"
+        if combo_main.cb_altvce.iseq("聚类稳健") put "cluster"
+        put ")"
+    }
+    if combo_main.vl_addfe.isneq("") put " addfe(" /hidden combo_main.vl_addfe ")"
+    if combo_main.ed_policy.isneq("") put " policy(" `""' combo_main.ed_policy `""' ")"
+    if combo_main.vl_addcontrols.isneq("") put " addcontrols(" /hidden combo_main.vl_addcontrols ")"
+    if combo_main.ck_ptrend put " ptrend"
+    if combo_main.ed_placebo.isneq("") put " placebo(" `""' combo_main.ed_placebo `""' ")"
+    if !combo_main.cb_altmodel.iseq("不更换") put " altmodel(" combo_main.cb_altmodel ")"
+    if combo_main.vl_mediator.isneq("") put " mediator(" /hidden combo_main.vl_mediator ")"
+    if combo_main.vl_moderator.isneq("") put " moderator(" /hidden combo_main.vl_moderator ")"
+    if combo_main.vn_group.isneq("") put " group(" /hidden combo_main.vn_group ")"
+    if combo_main.ed_dimension.isneq("") put " dimension(" `""' combo_main.ed_dimension `""' ")"
+    if combo_main.vn_hety.isneq("") put " hety(" /hidden combo_main.vn_hety ")"
+    if combo_main.vl_hetx.isneq("") put " hetx(" /hidden combo_main.vl_hetx ")"
+    if combo_main.ed_output.isneq("") put " outdir(" `""' combo_main.ed_output `""' ")"
+    if combo_main.ed_prefix.isneq("") put " prefix(" `""' combo_main.ed_prefix `""' ")"
+    if combo_more.cb_xy.isneq("") put " expectxy(" combo_more.cb_xy ")"
+    if combo_more.cb_xm.isneq("") put " expectxm(" combo_more.cb_xm ")"
+    if combo_more.cb_xwy.isneq("") put " expectxwy(" combo_more.cb_xwy ")"
+    put " level("
+    if combo_more.cb_baselevel.iseq("10%") put "90"
+    if combo_more.cb_baselevel.iseq("5%") put "95"
+    if combo_more.cb_baselevel.iseq("1%") put "99"
+    put ") medlevel("
+    if combo_more.cb_medlevel.iseq("10%") put "90"
+    if combo_more.cb_medlevel.iseq("5%") put "95"
+    if combo_more.cb_medlevel.iseq("1%") put "99"
+    put ") modlevel("
+    if combo_more.cb_modlevel.iseq("10%") put "90"
+    if combo_more.cb_modlevel.iseq("5%") put "95"
+    if combo_more.cb_modlevel.iseq("1%") put "99"
+    put ")"
+    if combo_more.ed_mincontrols.isneq("") put " mincontrols(" combo_more.ed_mincontrols ")"
+END
+
+LIST select_list
+BEGIN
+    分析不显著原因
+    查找显著组合
+END
+
+LIST vce_list
+BEGIN
+    常规标准误
+    异方差稳健
+    聚类稳健
+END
+
+LIST altvce_list
+BEGIN
+    不运行
+    常规标准误
+    异方差稳健
+    聚类稳健
+END
+
+LIST model_list
+BEGIN
+    不更换
+    普通最小二乘 OLS
+    高维固定效应 HDFE
+    面板固定效应 FE
+    面板随机效应 RE
+END
+
+LIST direction_list
+BEGIN
+    促进或抑制
+    促进
+    抑制
+    不预设
+END
+
+LIST ci_list
+BEGIN
+    10%
+    5%
+    1%
+END

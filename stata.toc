@@ -1,0 +1,3 @@
+v 3
+d JournalOne native Stata GUI package
+p journalone Journal-ready estimation, auditable preprocessing, and controlled activation

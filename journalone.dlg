@@ -1,0 +1,1759 @@
+/* journalone.dlg - native Stata empirical-analysis dialog */
+VERSION 15.0
+POSITION 0 0 1020 730
+
+SCRIPT PREINIT
+BEGIN
+    create DOUBLE baseline_model_count
+    baseline_model_count.setvalue 1
+END
+
+SCRIPT POSTINIT
+BEGIN
+    script baseline_model2_remove
+    script baseline_model3_remove
+    script baseline_model4_remove
+    script baseline_count1
+    script baseline_panel_collapse
+END
+
+DIALOG main, title("实证分析") tabtitle("实证分析")
+BEGIN
+    TEXT tx_level 20 10 75 ., label("置信水平：")
+    COMBOBOX cb_level 100 @ 100 ., dropdownlist contents(level_list)
+    TEXT tx_base_tab_note 225 @ 345 ., ///
+        label("空白模块跳过；基准回归可展开设置。")
+    BUTTON bu_update 880 7 115 ., label("一键更新") ///
+        onpush(program oneclick_update)
+
+    GROUPBOX gb_desc 15 40 990 52, label("描述性统计")
+    CHECKBOX ck_desc 30 62 175 ., label("生成描述性统计表") default(0)
+    TEXT tx_descvars 230 @ 95 ., label("统计变量：")
+    VARLIST vl_desc 330 @ 400 ., numeric ///
+        tooltip("按这里的变量先后顺序输出；留空则按被解释变量、核心变量、控制变量等自动排列")
+    TEXT tx_desc_note 750 @ 240 ., label("输出N、缺失、均值、标准差和极值。")
+
+    GROUPBOX gb_base 15 100 990 105, label("基准回归")
+    BUTTON bu_base_open 875 108 115 ., label("展开基准回归") onpush(script baseline_panel_expand)
+    TEXT tx_base_summary1 35 130 825 ., ///
+        label("点击“展开基准回归”编辑模型1—4；＋按顺序增加一组。")
+    TEXT tx_base_summary2 35 156 940 ., ///
+        label("模型1为主模型；结果按模型顺序合并输出，空白组不运行。")
+    TEXT tx_base_summary3 35 182 940 ., ///
+        label("收起后可继续填写稳健、内生、机制和异质性模块。")
+
+    GROUPBOX gb_base_editor 15 20 990 700, label("基准回归｜模型设置")
+    TEXT tx_instruction 35 43 255 ., ///
+        label("编辑模型1—4；每次＋新增一组直接显示。")
+    TEXT tx_count1 580 43 70 ., label("已配置：1组")
+    TEXT tx_count2 580 43 70 ., label("已配置：2组")
+    TEXT tx_count3 580 43 70 ., label("已配置：3组")
+    TEXT tx_count4 580 43 70 ., label("已配置：4组")
+    BUTTON bu_add 665 35 110 ., label("＋ 添加下一组") onpush(script baseline_add_model)
+    BUTTON bu_remove 785 35 120 ., label("－ 删除最后一组") onpush(script baseline_remove_model)
+    BUTTON bu_base_close 915 35 80 ., label("收起基准回归") onpush(script baseline_panel_collapse)
+
+    GROUPBOX gb1 30 65 960 158, label("模型 1（主模型）")
+    BUTTON bu_collapse1 920 136 55 ., label("折叠") onpush(program baseline_fold_all_dispatch)
+    BUTTON bu_expand1 920 134 55 ., label("展开") onpush(program baseline_render_model1)
+    TEXT tx_collapsed1 180 113 650 ., label("已折叠；内容保留并参与运行。")
+    TEXT tx_model1 45 88 85 ., label("模型类型：")
+    COMBOBOX cb_model1 135 @ 210 ., dropdownlist contents(model_list)
+    TEXT tx_y1 365 @ 90 ., label("被解释变量：")
+    VARNAME vn_y1 460 @ 210 ., numeric tooltip("被解释变量")
+    TEXT tx_vce1 690 @ 65 ., label("标准误：")
+    COMBOBOX cb_vce1 760 @ 190 ., dropdownlist contents(vce_list)
+    TEXT tx_x1 45 116 85 ., label("核心解释变量：")
+    VARLIST vl_x1 135 @ 325 ., numeric fv ts allowcat tooltip("核心解释变量，可按需要填写多个")
+    TEXT tx_controls1 45 144 85 ., label("控制变量：")
+    VARLIST vl_controls1 135 @ 535 ., numeric fv ts allowcat
+    TEXT tx_absorb1 690 @ 65 ., label("固定效应：")
+    VARLIST vl_absorb1 760 @ 190 ., tooltip("固定效应变量填写原名，不写i.前缀")
+    TEXT tx_panel1 45 172 85 ., label("面板ID：")
+    VARNAME vn_panel1 135 @ 210 .
+    TEXT tx_time1 365 @ 90 ., label("时间变量：")
+    VARNAME vn_time1 460 @ 210 ., numeric
+    TEXT tx_cluster1 690 @ 65 ., label("聚类变量：")
+    VARNAME vn_cluster1 760 @ 190 .
+    TEXT tx_if1 45 200 85 ., label("样本条件：")
+    EDIT ed_if1 135 @ 535 ., tooltip("例如 year>=2010 & year<=2025")
+    CHECKBOX ck_timefe1 760 @ 190 ., label("加入时间固定效应") default(1)
+    TEXT tx_note1 815 @ 160 ., label("")
+
+    GROUPBOX gb2 30 228 960 158, label("模型 2")
+    BUTTON bu_collapse2 920 174 55 ., label("折叠") onpush(program baseline_fold_all_dispatch)
+    BUTTON bu_expand2 920 172 55 ., label("展开") onpush(program baseline_render_model2)
+    TEXT tx_collapsed2 180 269 650 ., label("已折叠；内容保留并参与运行。")
+    TEXT tx_model2 45 251 85 ., label("模型类型：")
+    COMBOBOX cb_model2 135 @ 210 ., dropdownlist contents(model_list)
+    TEXT tx_y2 365 @ 90 ., label("被解释变量：")
+    VARNAME vn_y2 460 @ 210 ., numeric tooltip("被解释变量")
+    TEXT tx_vce2 690 @ 65 ., label("标准误：")
+    COMBOBOX cb_vce2 760 @ 190 ., dropdownlist contents(vce_list)
+    TEXT tx_x2 45 279 85 ., label("核心解释变量：")
+    VARLIST vl_x2 135 @ 325 ., numeric fv ts allowcat tooltip("核心解释变量，可按需要填写多个")
+    TEXT tx_controls2 45 307 85 ., label("控制变量：")
+    VARLIST vl_controls2 135 @ 535 ., numeric fv ts allowcat
+    TEXT tx_absorb2 690 @ 65 ., label("固定效应：")
+    VARLIST vl_absorb2 760 @ 190 ., tooltip("固定效应变量填写原名，不写i.前缀")
+    TEXT tx_panel2 45 335 85 ., label("面板ID：")
+    VARNAME vn_panel2 135 @ 210 .
+    TEXT tx_time2 365 @ 90 ., label("时间变量：")
+    VARNAME vn_time2 460 @ 210 ., numeric
+    TEXT tx_cluster2 690 @ 65 ., label("聚类变量：")
+    VARNAME vn_cluster2 760 @ 190 .
+    TEXT tx_if2 45 363 85 ., label("样本条件：")
+    EDIT ed_if2 135 @ 535 ., tooltip("例如 year>=2010 & year<=2025")
+    CHECKBOX ck_timefe2 760 @ 190 ., label("加入时间固定效应") default(0)
+    TEXT tx_note2 815 @ 160 ., label("")
+
+    GROUPBOX gb3 30 391 960 158, label("模型 3")
+    BUTTON bu_collapse3 920 212 55 ., label("折叠") onpush(program baseline_fold_all_dispatch)
+    BUTTON bu_expand3 920 210 55 ., label("展开") onpush(program baseline_render_model3)
+    TEXT tx_collapsed3 180 425 650 ., label("已折叠；内容保留并参与运行。")
+    TEXT tx_model3 45 414 85 ., label("模型类型：")
+    COMBOBOX cb_model3 135 @ 210 ., dropdownlist contents(model_list)
+    TEXT tx_y3 365 @ 90 ., label("被解释变量：")
+    VARNAME vn_y3 460 @ 210 ., numeric tooltip("被解释变量")
+    TEXT tx_vce3 690 @ 65 ., label("标准误：")
+    COMBOBOX cb_vce3 760 @ 190 ., dropdownlist contents(vce_list)
+    TEXT tx_x3 45 442 85 ., label("核心解释变量：")
+    VARLIST vl_x3 135 @ 325 ., numeric fv ts allowcat tooltip("核心解释变量，可按需要填写多个")
+    TEXT tx_controls3 45 470 85 ., label("控制变量：")
+    VARLIST vl_controls3 135 @ 535 ., numeric fv ts allowcat
+    TEXT tx_absorb3 690 @ 65 ., label("固定效应：")
+    VARLIST vl_absorb3 760 @ 190 ., tooltip("固定效应变量填写原名，不写i.前缀")
+    TEXT tx_panel3 45 498 85 ., label("面板ID：")
+    VARNAME vn_panel3 135 @ 210 .
+    TEXT tx_time3 365 @ 90 ., label("时间变量：")
+    VARNAME vn_time3 460 @ 210 ., numeric
+    TEXT tx_cluster3 690 @ 65 ., label("聚类变量：")
+    VARNAME vn_cluster3 760 @ 190 .
+    TEXT tx_if3 45 526 85 ., label("样本条件：")
+    EDIT ed_if3 135 @ 535 ., tooltip("例如 year>=2010 & year<=2025")
+    CHECKBOX ck_timefe3 760 @ 190 ., label("加入时间固定效应") default(0)
+    TEXT tx_note3 815 @ 160 ., label("")
+
+    GROUPBOX gb4 30 554 960 158, label("模型 4")
+    BUTTON bu_collapse4 920 250 55 ., label("折叠") onpush(program baseline_fold_all_dispatch)
+    BUTTON bu_expand4 920 248 55 ., label("展开") onpush(program baseline_render_model4)
+    TEXT tx_collapsed4 180 581 650 ., label("已折叠；内容保留并参与运行。")
+    TEXT tx_model4 45 577 85 ., label("模型类型：")
+    COMBOBOX cb_model4 135 @ 210 ., dropdownlist contents(model_list)
+    TEXT tx_y4 365 @ 90 ., label("被解释变量：")
+    VARNAME vn_y4 460 @ 210 ., numeric tooltip("被解释变量")
+    TEXT tx_vce4 690 @ 65 ., label("标准误：")
+    COMBOBOX cb_vce4 760 @ 190 ., dropdownlist contents(vce_list)
+    TEXT tx_x4 45 605 85 ., label("核心解释变量：")
+    VARLIST vl_x4 135 @ 325 ., numeric fv ts allowcat tooltip("核心解释变量，可按需要填写多个")
+    TEXT tx_controls4 45 633 85 ., label("控制变量：")
+    VARLIST vl_controls4 135 @ 535 ., numeric fv ts allowcat
+    TEXT tx_absorb4 690 @ 65 ., label("固定效应：")
+    VARLIST vl_absorb4 760 @ 190 ., tooltip("固定效应变量填写原名，不写i.前缀")
+    TEXT tx_panel4 45 661 85 ., label("面板ID：")
+    VARNAME vn_panel4 135 @ 210 .
+    TEXT tx_time4 365 @ 90 ., label("时间变量：")
+    VARNAME vn_time4 460 @ 210 ., numeric
+    TEXT tx_cluster4 690 @ 65 ., label("聚类变量：")
+    VARNAME vn_cluster4 760 @ 190 .
+    TEXT tx_if4 45 689 85 ., label("样本条件：")
+    EDIT ed_if4 135 @ 535 ., tooltip("例如 year>=2010 & year<=2025")
+    CHECKBOX ck_timefe4 760 @ 190 ., label("加入时间固定效应") default(0)
+    TEXT tx_note4 815 @ 160 ., label("")
+
+    GROUPBOX gb_robust 15 210 990 130, label("稳健性检验")
+    TEXT tx_alty 30 232 135 ., label("替换被解释变量：")
+    VARLIST vl_alty 175 @ 300 ., numeric
+    TEXT tx_altx 500 @ 135 ., label("替换核心解释变量：")
+    VARLIST vl_altx 675 @ 300 ., numeric
+    TEXT tx_addcontrols 30 263 135 ., label("追加控制变量：")
+    VARLIST vl_addcontrols 175 @ 300 ., numeric fv ts allowcat
+    TEXT tx_addfe 500 @ 135 ., label("追加固定效应：")
+    VARLIST vl_addfe 675 @ 300 .
+    TEXT tx_lags 30 294 135 ., label("核心变量滞后期：")
+    EDIT ed_lags 175 @ 90 ., tooltip("例如 1 2")
+    TEXT tx_leads 285 @ 80 ., label("超前期：")
+    EDIT ed_leads 365 @ 90 ., tooltip("例如 1 2")
+    TEXT tx_subsample 500 @ 135 ., label("替代样本条件：")
+    EDIT ed_subsample 675 @ 300 .
+    TEXT tx_robust_note 30 317 940 ., label("空白项跳过；替代标准误在“更多选项”设置。")
+
+    GROUPBOX gb_endog 15 345 990 75, label("内生性检验")
+    TEXT tx_endog 30 367 135 ., label("2SLS内生变量：")
+    VARLIST vl_endog 175 @ 300 ., numeric fv ts allowcat
+    TEXT tx_instruments 500 @ 135 ., label("工具变量：")
+    VARLIST vl_instruments 675 @ 300 ., numeric fv ts allowcat
+    TEXT tx_endog_note 30 397 940 ., label("请同时填写内生变量和工具变量。")
+
+    GROUPBOX gb_mech 15 425 990 70, label("机制检验")
+    TEXT tx_mediators 30 447 135 ., label("中介变量：")
+    VARLIST vl_mediators 175 @ 300 ., numeric
+    TEXT tx_moderators 500 @ 135 ., label("调节变量：")
+    VARLIST vl_moderators 675 @ 300 ., numeric
+    TEXT tx_mech_note 30 473 940 ., label("沿用模型1；中介和调节变量分别填写。")
+
+    GROUPBOX gb_hetero 15 500 990 60, label("异质性分析")
+    TEXT tx_group 30 522 135 ., label("数值型分组变量：")
+    VARNAME vn_group 175 @ 300 ., numeric tooltip("最多12类；不自动切分")
+    TEXT tx_group_note 500 @ 522 ., label("按预设类别分组；空白跳过。")
+
+    TEXT tx_license 600 10 45 ., label("密钥：")
+    EDIT ed_license 650 8 160 ., nomemory password max(64) ///
+        tooltip("首次使用时输入发布者提供的授权密钥；验证成功后本机留空也可运行")
+END
+
+DIALOG more, tabtitle("更多选项")
+BEGIN
+    GROUPBOX gb_basic 15 15 990 310, label("基础与高级选项")
+    TEXT tx_sample 30 40 130 ., label("描述统计样本：")
+    COMBOBOX cb_sample 165 @ 180 ., dropdownlist contents(sample_list)
+    TEXT tx_report 365 @ 120 ., label("自动生成文档：")
+    COMBOBOX cb_report 495 @ 180 ., dropdownlist contents(report_list)
+    TEXT tx_decimals 700 @ 100 ., label("保留小数位数：")
+    EDIT ed_decimals 805 @ 180 ., default("3") numonly
+
+    TEXT tx_missing 30 65 130 ., label("缺失值处理：")
+    COMBOBOX cb_missing 165 @ 180 ., dropdownlist contents(missing_list)
+    TEXT tx_statistic 365 @ 120 ., label("输出统计量：")
+    COMBOBOX cb_statistic 495 @ 180 ., dropdownlist contents(statistic_list)
+    TEXT tx_seed 700 @ 100 ., label("随机种子：")
+    EDIT ed_seed 805 @ 180 ., default("20260814") numonly
+
+    TEXT tx_treat 30 90 130 ., label("DID处理组：")
+    VARNAME vn_treat 165 @ 180 ., numeric
+    TEXT tx_post 365 @ 120 ., label("DID政策后：")
+    VARNAME vn_post 495 @ 180 ., numeric
+    TEXT tx_timefe_label 700 @ 100 ., label("时间固定效应：")
+    TEXT tx_timefe_note 805 @ 180 ., label("按各基准模型设置")
+
+    TEXT tx_ptrend_label 30 115 130 ., label("平行趋势检验：")
+    CHECKBOX ck_ptrend 165 @ 180 ., label("运行")
+    TEXT tx_ptlevel 365 @ 120 ., label("平行趋势CI：")
+    COMBOBOX cb_ptlevel 495 @ 180 ., dropdownlist contents(level_list)
+    TEXT tx_ptbase 700 @ 100 ., label("省略基准期：")
+    EDIT ed_ptbase 805 @ 180 ., default("-1")
+
+    TEXT tx_altvce 30 140 130 ., label("替代标准误：")
+    COMBOBOX cb_altvce 165 @ 180 ., dropdownlist contents(altvce_list)
+    TEXT tx_altcluster 365 @ 120 ., label("替代聚类变量：")
+    VARNAME vn_altcluster 495 @ 180 .
+    TEXT tx_psmneighbor 700 @ 100 ., label("近邻匹配个数：")
+    EDIT ed_psmneighbor 805 @ 180 ., default("1") numonly
+
+    TEXT tx_psm_method 30 165 130 ., label("PSM匹配方法：")
+    COMBOBOX cb_psm_method 165 @ 180 ., dropdownlist contents(psm_list)
+    TEXT tx_psm_time 365 @ 120 ., label("PSM时期变量：")
+    VARNAME vn_psm_time 495 @ 180 ., numeric
+    TEXT tx_psm_covars 700 @ 100 ., label("PSM匹配变量：")
+    VARLIST vl_psm_covars 805 @ 180 ., numeric fv allowcat
+
+    TEXT tx_heckman 30 190 130 ., label("Heckman选择变量：")
+    VARNAME vn_heckman_sel 165 @ 100 ., numeric
+    CHECKBOX ck_heckman_fe 275 @ 75 ., label("加入FE")
+    TEXT tx_heckman_covars 365 @ 120 ., label("选择方程变量：")
+    VARLIST vl_heckman_covars 495 @ 180 ., numeric fv allowcat ///
+        tooltip("建议包含有理论依据的排除限制；留空时回退到工具变量和控制变量")
+    TEXT tx_gmm_method 700 @ 100 ., label("动态GMM：")
+    COMBOBOX cb_gmm_method 805 @ 180 ., dropdownlist contents(gmm_list)
+
+    TEXT tx_gmm_extra 30 215 130 ., label("GMM额外变量：")
+    VARLIST vl_gmm_extra 165 @ 180 ., numeric ts
+    TEXT tx_gmm_lags 365 @ 120 ., label("GMM滞后/步骤：")
+    EDIT ed_gmm_lags 495 @ 55 ., default("1") numonly
+    CHECKBOX ck_gmm_twostep 560 @ 115 ., label("两步估计")
+    TEXT tx_dml_method 700 @ 125 ., label("双重机器学习：")
+    COMBOBOX cb_dml_method 805 @ 180 ., dropdownlist contents(dml_list)
+
+    TEXT tx_dml_iv 30 240 130 ., label("DML工具变量：")
+    VARLIST vl_dml_iv 165 @ 180 ., numeric fv allowcat
+    TEXT tx_dml_controls 365 @ 120 ., label("DML额外控制：")
+    VARLIST vl_dml_controls 495 @ 180 ., numeric fv allowcat
+    TEXT tx_dml_folds 700 @ 125 ., label("交叉拟合折数：")
+    EDIT ed_dml_folds 805 @ 180 ., default("5") numonly
+
+    TEXT tx_group_bins 30 265 130 ., label("异质性重分类：")
+    EDIT ed_group_bins 165 @ 180 ., tooltip("留空不重分；填写2-12表示分位组") numonly
+    TEXT tx_split_hetero 365 @ 120 ., label("异质性单独表：")
+    CHECKBOX ck_split_hetero 495 @ 180 ., label("输出")
+    TEXT tx_group_test 700 @ 125 ., label("组间系数检验：")
+    CHECKBOX ck_group_test 805 @ 180 ., label("输出联合检验")
+
+    TEXT tx_med_method 30 290 130 ., label("中介效应：")
+    COMBOBOX cb_med_method 165 @ 180 ., dropdownlist contents(med_list)
+    TEXT tx_split_med 365 @ 120 ., label("中介效应单独表：")
+    CHECKBOX ck_split_med 495 @ 180 ., label("输出")
+    TEXT tx_mod_plot 700 @ 125 ., label("调节效应图：")
+    CHECKBOX ck_mod_plot 805 @ 180 ., label("输出边际效应图")
+
+    GROUPBOX gb_adjust 15 335 990 150, label("显著性调整与输出")
+    TEXT tx_adjust 30 360 130 ., label("调整方式：")
+    COMBOBOX cb_adjust 165 @ 180 ., dropdownlist contents(adjust_list)
+    TEXT tx_winsor_low 365 @ 120 ., label("缩尾下分位：")
+    EDIT ed_winsor_low 495 @ 180 ., default("1") numonly
+    TEXT tx_winsor_high 700 @ 125 ., label("缩尾上分位：")
+    EDIT ed_winsor_high 805 @ 180 ., default("99") numonly
+
+    TEXT tx_pstar1 30 385 130 ., label("***阈值：")
+    EDIT ed_pstar1 165 @ 180 ., default("0.01")
+    TEXT tx_pstar2 365 @ 120 ., label("**阈值：")
+    EDIT ed_pstar2 495 @ 180 ., default("0.05")
+    TEXT tx_pstar3 700 @ 125 ., label("*阈值：")
+    EDIT ed_pstar3 805 @ 180 ., default("0.10")
+
+    TEXT tx_reps 30 410 130 ., label("DML重抽样次数：")
+    EDIT ed_reps 165 @ 180 ., default("1") numonly ///
+        tooltip("1-100；数值越大计算越慢，仅用于DML交叉拟合重抽样")
+    TEXT tx_prefix 365 @ 120 ., label("文件名前缀：")
+    EDIT ed_prefix 495 @ 180 ., default("journalone")
+    TEXT tx_replace_info 700 @ 285 ., label("同一模块结果自动覆盖，不新建时间戳文件夹。")
+
+    TEXT tx_outdir 30 435 130 ., label("输出目录：")
+    EDIT ed_outdir 165 @ 515 ., default("实证分析结果")
+    TEXT tx_scope_note 700 @ 285 ., ///
+        label("高级方法仅在必需变量齐全时运行；失败不影响基准结果。")
+
+    TEXT tx_output_note 30 465 950 20, ///
+        label("所有调整均在临时副本中执行；原始内存数据、变量顺序和数据签名会被复核。")
+END
+
+SCRIPT empirical_modules_hide
+BEGIN
+    main.gb_robust.hide
+    main.tx_alty.hide
+    main.vl_alty.hide
+    main.tx_altx.hide
+    main.vl_altx.hide
+    main.tx_addcontrols.hide
+    main.vl_addcontrols.hide
+    main.tx_addfe.hide
+    main.vl_addfe.hide
+    main.tx_lags.hide
+    main.ed_lags.hide
+    main.tx_leads.hide
+    main.ed_leads.hide
+    main.tx_subsample.hide
+    main.ed_subsample.hide
+    main.tx_robust_note.hide
+    main.gb_endog.hide
+    main.tx_endog.hide
+    main.vl_endog.hide
+    main.tx_instruments.hide
+    main.vl_instruments.hide
+    main.tx_endog_note.hide
+    main.gb_mech.hide
+    main.tx_mediators.hide
+    main.vl_mediators.hide
+    main.tx_moderators.hide
+    main.vl_moderators.hide
+    main.tx_mech_note.hide
+    main.gb_hetero.hide
+    main.tx_group.hide
+    main.vn_group.hide
+    main.tx_group_note.hide
+END
+
+SCRIPT empirical_modules_show
+BEGIN
+    main.gb_robust.show
+    main.tx_alty.show
+    main.vl_alty.show
+    main.tx_altx.show
+    main.vl_altx.show
+    main.tx_addcontrols.show
+    main.vl_addcontrols.show
+    main.tx_addfe.show
+    main.vl_addfe.show
+    main.tx_lags.show
+    main.ed_lags.show
+    main.tx_leads.show
+    main.ed_leads.show
+    main.tx_subsample.show
+    main.ed_subsample.show
+    main.tx_robust_note.show
+    main.gb_endog.show
+    main.tx_endog.show
+    main.vl_endog.show
+    main.tx_instruments.show
+    main.vl_instruments.show
+    main.tx_endog_note.show
+    main.gb_mech.show
+    main.tx_mediators.show
+    main.vl_mediators.show
+    main.tx_moderators.show
+    main.vl_moderators.show
+    main.tx_mech_note.show
+    main.gb_hetero.show
+    main.tx_group.show
+    main.vn_group.show
+    main.tx_group_note.show
+END
+
+SCRIPT baseline_count1
+BEGIN
+    main.tx_count1.show
+    main.tx_count2.hide
+    main.tx_count3.hide
+    main.tx_count4.hide
+END
+
+SCRIPT baseline_count2
+BEGIN
+    main.tx_count1.hide
+    main.tx_count2.show
+    main.tx_count3.hide
+    main.tx_count4.hide
+END
+
+SCRIPT baseline_count3
+BEGIN
+    main.tx_count1.hide
+    main.tx_count2.hide
+    main.tx_count3.show
+    main.tx_count4.hide
+END
+
+SCRIPT baseline_count4
+BEGIN
+    main.tx_count1.hide
+    main.tx_count2.hide
+    main.tx_count3.hide
+    main.tx_count4.show
+END
+
+SCRIPT baseline_model1_hide
+BEGIN
+    script baseline_model1_collapse
+    main.gb1.hide
+    main.bu_expand1.hide
+    main.tx_collapsed1.hide
+END
+
+SCRIPT baseline_model2_hide
+BEGIN
+    script baseline_model2_collapse
+    main.gb2.hide
+    main.bu_expand2.hide
+    main.tx_collapsed2.hide
+END
+
+SCRIPT baseline_model3_hide
+BEGIN
+    script baseline_model3_collapse
+    main.gb3.hide
+    main.bu_expand3.hide
+    main.tx_collapsed3.hide
+END
+
+SCRIPT baseline_model4_hide
+BEGIN
+    script baseline_model4_collapse
+    main.gb4.hide
+    main.bu_expand4.hide
+    main.tx_collapsed4.hide
+END
+
+SCRIPT baseline_layout_all_collapsed
+BEGIN
+    main.gb1.setposition 30 65 960 32
+    main.bu_expand1.setposition 920 69 55 .
+    main.tx_collapsed1.setposition 180 73 650 .
+    main.gb2.setposition 30 97 960 32
+    main.bu_expand2.setposition 920 101 55 .
+    main.tx_collapsed2.setposition 180 105 650 .
+    main.gb3.setposition 30 129 960 32
+    main.bu_expand3.setposition 920 133 55 .
+    main.tx_collapsed3.setposition 180 137 650 .
+    main.gb4.setposition 30 161 960 32
+    main.bu_expand4.setposition 920 165 55 .
+    main.tx_collapsed4.setposition 180 169 650 .
+END
+
+SCRIPT baseline_layout_model1
+BEGIN
+    main.gb1.setposition 30 65 960 158
+    main.bu_collapse1.setposition 920 71 55 .
+    main.gb2.setposition 30 228 960 32
+    main.bu_expand2.setposition 920 232 55 .
+    main.tx_collapsed2.setposition 180 236 650 .
+    main.gb3.setposition 30 260 960 32
+    main.bu_expand3.setposition 920 264 55 .
+    main.tx_collapsed3.setposition 180 268 650 .
+    main.gb4.setposition 30 292 960 32
+    main.bu_expand4.setposition 920 296 55 .
+    main.tx_collapsed4.setposition 180 300 650 .
+END
+
+SCRIPT baseline_layout_model2
+BEGIN
+    main.gb1.setposition 30 65 960 32
+    main.bu_expand1.setposition 920 69 55 .
+    main.tx_collapsed1.setposition 180 73 650 .
+    main.gb2.setposition 30 228 960 158
+    main.bu_collapse2.setposition 920 234 55 .
+    main.gb3.setposition 30 391 960 32
+    main.bu_expand3.setposition 920 395 55 .
+    main.tx_collapsed3.setposition 180 399 650 .
+    main.gb4.setposition 30 423 960 32
+    main.bu_expand4.setposition 920 427 55 .
+    main.tx_collapsed4.setposition 180 431 650 .
+END
+
+SCRIPT baseline_layout_model3
+BEGIN
+    main.gb1.setposition 30 65 960 32
+    main.bu_expand1.setposition 920 69 55 .
+    main.tx_collapsed1.setposition 180 73 650 .
+    main.gb2.setposition 30 228 960 32
+    main.bu_expand2.setposition 920 232 55 .
+    main.tx_collapsed2.setposition 180 236 650 .
+    main.gb3.setposition 30 391 960 158
+    main.bu_collapse3.setposition 920 397 55 .
+    main.gb4.setposition 30 554 960 32
+    main.bu_expand4.setposition 920 558 55 .
+    main.tx_collapsed4.setposition 180 562 650 .
+END
+
+SCRIPT baseline_layout_model4
+BEGIN
+    main.gb1.setposition 30 65 960 32
+    main.bu_expand1.setposition 920 69 55 .
+    main.tx_collapsed1.setposition 180 73 650 .
+    main.gb2.setposition 30 228 960 32
+    main.bu_expand2.setposition 920 232 55 .
+    main.tx_collapsed2.setposition 180 236 650 .
+    main.gb3.setposition 30 391 960 32
+    main.bu_expand3.setposition 920 395 55 .
+    main.tx_collapsed3.setposition 180 399 650 .
+    main.gb4.setposition 30 554 960 158
+    main.bu_collapse4.setposition 920 560 55 .
+END
+
+PROGRAM baseline_visibility_dispatch
+BEGIN
+    if baseline_model_count.iseq(1) {
+        call main.gb_base_editor.setposition 15 20 990 210
+    }
+    else {
+        if baseline_model_count.iseq(2) {
+            call main.gb_base_editor.setposition 15 20 990 370
+        }
+        else {
+            if baseline_model_count.iseq(3) {
+                call main.gb_base_editor.setposition 15 20 990 535
+            }
+            else {
+                call main.gb_base_editor.setposition 15 20 990 700
+            }
+        }
+    }
+    call script baseline_model1_hide
+    call script baseline_model2_hide
+    call script baseline_model3_hide
+    call script baseline_model4_hide
+    if baseline_model_count.iseq(1) {
+        call script baseline_model1_expand
+    }
+    else {
+        if baseline_model_count.iseq(2) {
+            call script baseline_model1_expand
+            call script baseline_model2_expand
+        }
+        else {
+            if baseline_model_count.iseq(3) {
+                call script baseline_model1_expand
+                call script baseline_model2_expand
+                call script baseline_model3_expand
+            }
+            else {
+                call script baseline_model1_expand
+                call script baseline_model2_expand
+                call script baseline_model3_expand
+                call script baseline_model4_expand
+            }
+        }
+    }
+END
+
+/* Render routines use PROGRAM calls so all hide/show operations finish in
+   order.  This avoids the asynchronous nested-SCRIPT overlap that can make
+   two model cards appear expanded at the same time. */
+PROGRAM baseline_fold_all_dispatch
+BEGIN
+    call script baseline_model1_collapse
+    call script baseline_model2_collapse
+    call script baseline_model3_collapse
+    call script baseline_model4_collapse
+    call script baseline_layout_all_collapsed
+    call program baseline_visibility_dispatch
+END
+
+PROGRAM baseline_render_model1
+BEGIN
+    call script baseline_model1_collapse
+    call script baseline_model2_collapse
+    call script baseline_model3_collapse
+    call script baseline_model4_collapse
+    call script baseline_layout_all_collapsed
+    call program baseline_visibility_dispatch
+    call script baseline_layout_model1
+    call script baseline_model1_expand
+END
+
+PROGRAM baseline_render_model2
+BEGIN
+    call script baseline_model1_collapse
+    call script baseline_model2_collapse
+    call script baseline_model3_collapse
+    call script baseline_model4_collapse
+    call script baseline_layout_all_collapsed
+    call program baseline_visibility_dispatch
+    call script baseline_layout_model2
+    call script baseline_model2_expand
+END
+
+PROGRAM baseline_render_model3
+BEGIN
+    call script baseline_model1_collapse
+    call script baseline_model2_collapse
+    call script baseline_model3_collapse
+    call script baseline_model4_collapse
+    call script baseline_layout_all_collapsed
+    call program baseline_visibility_dispatch
+    call script baseline_layout_model3
+    call script baseline_model3_expand
+END
+
+PROGRAM baseline_render_model4
+BEGIN
+    call script baseline_model1_collapse
+    call script baseline_model2_collapse
+    call script baseline_model3_collapse
+    call script baseline_model4_collapse
+    call script baseline_layout_all_collapsed
+    call program baseline_visibility_dispatch
+    call script baseline_layout_model4
+    call script baseline_model4_expand
+END
+
+SCRIPT baseline_fold_all
+BEGIN
+    program baseline_fold_all_dispatch
+END
+
+SCRIPT baseline_open_model1
+BEGIN
+    program baseline_render_model1
+END
+
+SCRIPT baseline_open_model2
+BEGIN
+    program baseline_render_model2
+END
+
+SCRIPT baseline_open_model3
+BEGIN
+    program baseline_render_model3
+END
+
+SCRIPT baseline_open_model4
+BEGIN
+    program baseline_render_model4
+END
+
+SCRIPT baseline_panel_expand
+BEGIN
+    main.tx_level.hide
+    main.cb_level.hide
+    main.gb_desc.hide
+    main.ck_desc.hide
+    main.tx_descvars.hide
+    main.vl_desc.hide
+    main.tx_desc_note.hide
+    main.gb_base.hide
+    main.tx_base_tab_note.hide
+    main.bu_update.hide
+    main.tx_license.setposition 300 43 45 .
+    main.ed_license.setposition 345 35 145 .
+    main.bu_base_open.hide
+    main.tx_base_summary1.hide
+    main.tx_base_summary2.hide
+    main.tx_base_summary3.hide
+    script empirical_modules_hide
+    main.gb_base_editor.show
+    main.tx_instruction.show
+    main.bu_add.show
+    main.bu_remove.show
+    main.bu_base_close.show
+    program baseline_panel_expand_dispatch
+END
+
+PROGRAM baseline_panel_expand_dispatch
+BEGIN
+    if baseline_model_count.iseq(1) {
+        call script baseline_count1
+        call main.bu_add.enable
+        call main.bu_remove.disable
+        call program baseline_visibility_dispatch
+    }
+    else {
+        if baseline_model_count.iseq(2) {
+            call script baseline_count2
+            call main.bu_add.enable
+            call main.bu_remove.enable
+            call program baseline_visibility_dispatch
+        }
+        else {
+            if baseline_model_count.iseq(3) {
+                call script baseline_count3
+                call main.bu_add.enable
+                call main.bu_remove.enable
+                call program baseline_visibility_dispatch
+            }
+            else {
+                call script baseline_count4
+                call main.bu_add.disable
+                call main.bu_remove.enable
+                call program baseline_visibility_dispatch
+            }
+        }
+    }
+END
+
+SCRIPT baseline_panel_collapse
+BEGIN
+    main.tx_level.show
+    main.cb_level.show
+    main.tx_license.setposition 600 10 45 .
+    main.ed_license.setposition 650 8 160 .
+    main.gb_desc.show
+    main.ck_desc.show
+    main.tx_descvars.show
+    main.vl_desc.show
+    main.tx_desc_note.show
+    main.gb_base_editor.hide
+    main.tx_instruction.hide
+    main.tx_count1.hide
+    main.tx_count2.hide
+    main.tx_count3.hide
+    main.tx_count4.hide
+    main.bu_add.hide
+    main.bu_remove.hide
+    main.bu_base_close.hide
+    script baseline_model1_hide
+    script baseline_model2_hide
+    script baseline_model3_hide
+    script baseline_model4_hide
+    main.gb_base.show
+    main.tx_base_tab_note.show
+    main.bu_update.show
+    main.bu_base_open.show
+    main.tx_base_summary1.show
+    main.tx_base_summary2.show
+    main.tx_base_summary3.show
+    script empirical_modules_show
+END
+
+SCRIPT baseline_add_model
+BEGIN
+    program baseline_add_model_dispatch
+END
+
+PROGRAM baseline_add_model_dispatch
+BEGIN
+    if baseline_model_count.iseq(1) {
+        call baseline_model_count.setvalue 2
+        call script baseline_count2
+        call program baseline_visibility_dispatch
+        call main.bu_remove.enable
+    }
+    else {
+        if baseline_model_count.iseq(2) {
+            call baseline_model_count.setvalue 3
+            call script baseline_count3
+            call program baseline_visibility_dispatch
+        }
+        else {
+            if baseline_model_count.iseq(3) {
+                call baseline_model_count.setvalue 4
+                call script baseline_count4
+                call program baseline_visibility_dispatch
+                call main.bu_add.disable
+            }
+        }
+    }
+END
+
+SCRIPT baseline_remove_model
+BEGIN
+    program baseline_remove_model_dispatch
+END
+
+PROGRAM baseline_remove_model_dispatch
+BEGIN
+    if baseline_model_count.iseq(4) {
+        call script baseline_model4_remove
+        call baseline_model_count.setvalue 3
+        call script baseline_count3
+        call program baseline_visibility_dispatch
+        call main.bu_add.enable
+    }
+    else {
+        if baseline_model_count.iseq(3) {
+            call script baseline_model3_remove
+            call baseline_model_count.setvalue 2
+            call script baseline_count2
+            call program baseline_visibility_dispatch
+        }
+        else {
+            if baseline_model_count.iseq(2) {
+                call script baseline_model2_remove
+                call baseline_model_count.setvalue 1
+                call script baseline_count1
+                call program baseline_visibility_dispatch
+                call main.bu_remove.disable
+            }
+        }
+    }
+END
+
+SCRIPT baseline_model1_expand
+BEGIN
+    main.gb1.show
+    main.bu_collapse1.hide
+    main.bu_expand1.hide
+    main.tx_collapsed1.hide
+    main.tx_model1.show
+    main.cb_model1.show
+    main.tx_y1.show
+    main.vn_y1.show
+    main.tx_x1.show
+    main.vl_x1.show
+    main.tx_controls1.show
+    main.vl_controls1.show
+    main.tx_absorb1.show
+    main.vl_absorb1.show
+    main.tx_panel1.show
+    main.vn_panel1.show
+    main.tx_time1.show
+    main.vn_time1.show
+    main.tx_if1.show
+    main.ed_if1.show
+    main.tx_vce1.show
+    main.cb_vce1.show
+    main.tx_cluster1.show
+    main.vn_cluster1.show
+    main.ck_timefe1.show
+    main.tx_note1.hide
+END
+
+SCRIPT baseline_model1_collapse
+BEGIN
+    main.bu_collapse1.hide
+    main.bu_expand1.hide
+    main.tx_collapsed1.hide
+    main.tx_model1.hide
+    main.cb_model1.hide
+    main.tx_y1.hide
+    main.vn_y1.hide
+    main.tx_x1.hide
+    main.vl_x1.hide
+    main.tx_controls1.hide
+    main.vl_controls1.hide
+    main.tx_absorb1.hide
+    main.vl_absorb1.hide
+    main.tx_panel1.hide
+    main.vn_panel1.hide
+    main.tx_time1.hide
+    main.vn_time1.hide
+    main.tx_if1.hide
+    main.ed_if1.hide
+    main.tx_vce1.hide
+    main.cb_vce1.hide
+    main.tx_cluster1.hide
+    main.vn_cluster1.hide
+    main.ck_timefe1.hide
+    main.tx_note1.hide
+END
+
+SCRIPT baseline_model2_expand
+BEGIN
+    main.gb2.show
+    main.bu_collapse2.hide
+    main.bu_expand2.hide
+    main.tx_collapsed2.hide
+    main.tx_model2.show
+    main.cb_model2.show
+    main.tx_y2.show
+    main.vn_y2.show
+    main.tx_x2.show
+    main.vl_x2.show
+    main.tx_controls2.show
+    main.vl_controls2.show
+    main.tx_absorb2.show
+    main.vl_absorb2.show
+    main.tx_panel2.show
+    main.vn_panel2.show
+    main.tx_time2.show
+    main.vn_time2.show
+    main.tx_if2.show
+    main.ed_if2.show
+    main.tx_vce2.show
+    main.cb_vce2.show
+    main.tx_cluster2.show
+    main.vn_cluster2.show
+    main.ck_timefe2.show
+    main.tx_note2.hide
+END
+
+SCRIPT baseline_model2_collapse
+BEGIN
+    main.bu_collapse2.hide
+    main.bu_expand2.hide
+    main.tx_collapsed2.hide
+    main.tx_model2.hide
+    main.cb_model2.hide
+    main.tx_y2.hide
+    main.vn_y2.hide
+    main.tx_x2.hide
+    main.vl_x2.hide
+    main.tx_controls2.hide
+    main.vl_controls2.hide
+    main.tx_absorb2.hide
+    main.vl_absorb2.hide
+    main.tx_panel2.hide
+    main.vn_panel2.hide
+    main.tx_time2.hide
+    main.vn_time2.hide
+    main.tx_if2.hide
+    main.ed_if2.hide
+    main.tx_vce2.hide
+    main.cb_vce2.hide
+    main.tx_cluster2.hide
+    main.vn_cluster2.hide
+    main.ck_timefe2.hide
+    main.tx_note2.hide
+END
+
+SCRIPT baseline_model2_remove
+BEGIN
+    script baseline_model2_collapse
+    main.gb2.hide
+    main.bu_expand2.hide
+    main.tx_collapsed2.hide
+    main.vn_y2.setvalue ""
+    main.vl_x2.setvalue ""
+    main.vl_controls2.setvalue ""
+    main.vl_absorb2.setvalue ""
+    main.vn_panel2.setvalue ""
+    main.vn_time2.setvalue ""
+    main.vn_cluster2.setvalue ""
+    main.ed_if2.setvalue ""
+END
+
+SCRIPT baseline_model3_expand
+BEGIN
+    main.gb3.show
+    main.bu_collapse3.hide
+    main.bu_expand3.hide
+    main.tx_collapsed3.hide
+    main.tx_model3.show
+    main.cb_model3.show
+    main.tx_y3.show
+    main.vn_y3.show
+    main.tx_x3.show
+    main.vl_x3.show
+    main.tx_controls3.show
+    main.vl_controls3.show
+    main.tx_absorb3.show
+    main.vl_absorb3.show
+    main.tx_panel3.show
+    main.vn_panel3.show
+    main.tx_time3.show
+    main.vn_time3.show
+    main.tx_if3.show
+    main.ed_if3.show
+    main.tx_vce3.show
+    main.cb_vce3.show
+    main.tx_cluster3.show
+    main.vn_cluster3.show
+    main.ck_timefe3.show
+    main.tx_note3.hide
+END
+
+SCRIPT baseline_model3_collapse
+BEGIN
+    main.bu_collapse3.hide
+    main.bu_expand3.hide
+    main.tx_collapsed3.hide
+    main.tx_model3.hide
+    main.cb_model3.hide
+    main.tx_y3.hide
+    main.vn_y3.hide
+    main.tx_x3.hide
+    main.vl_x3.hide
+    main.tx_controls3.hide
+    main.vl_controls3.hide
+    main.tx_absorb3.hide
+    main.vl_absorb3.hide
+    main.tx_panel3.hide
+    main.vn_panel3.hide
+    main.tx_time3.hide
+    main.vn_time3.hide
+    main.tx_if3.hide
+    main.ed_if3.hide
+    main.tx_vce3.hide
+    main.cb_vce3.hide
+    main.tx_cluster3.hide
+    main.vn_cluster3.hide
+    main.ck_timefe3.hide
+    main.tx_note3.hide
+END
+
+SCRIPT baseline_model3_remove
+BEGIN
+    script baseline_model3_collapse
+    main.gb3.hide
+    main.bu_expand3.hide
+    main.tx_collapsed3.hide
+    main.vn_y3.setvalue ""
+    main.vl_x3.setvalue ""
+    main.vl_controls3.setvalue ""
+    main.vl_absorb3.setvalue ""
+    main.vn_panel3.setvalue ""
+    main.vn_time3.setvalue ""
+    main.vn_cluster3.setvalue ""
+    main.ed_if3.setvalue ""
+END
+
+SCRIPT baseline_model4_expand
+BEGIN
+    main.gb4.show
+    main.bu_collapse4.hide
+    main.bu_expand4.hide
+    main.tx_collapsed4.hide
+    main.tx_model4.show
+    main.cb_model4.show
+    main.tx_y4.show
+    main.vn_y4.show
+    main.tx_x4.show
+    main.vl_x4.show
+    main.tx_controls4.show
+    main.vl_controls4.show
+    main.tx_absorb4.show
+    main.vl_absorb4.show
+    main.tx_panel4.show
+    main.vn_panel4.show
+    main.tx_time4.show
+    main.vn_time4.show
+    main.tx_if4.show
+    main.ed_if4.show
+    main.tx_vce4.show
+    main.cb_vce4.show
+    main.tx_cluster4.show
+    main.vn_cluster4.show
+    main.ck_timefe4.show
+    main.tx_note4.hide
+END
+
+SCRIPT baseline_model4_collapse
+BEGIN
+    main.bu_collapse4.hide
+    main.bu_expand4.hide
+    main.tx_collapsed4.hide
+    main.tx_model4.hide
+    main.cb_model4.hide
+    main.tx_y4.hide
+    main.vn_y4.hide
+    main.tx_x4.hide
+    main.vl_x4.hide
+    main.tx_controls4.hide
+    main.vl_controls4.hide
+    main.tx_absorb4.hide
+    main.vl_absorb4.hide
+    main.tx_panel4.hide
+    main.vn_panel4.hide
+    main.tx_time4.hide
+    main.vn_time4.hide
+    main.tx_if4.hide
+    main.ed_if4.hide
+    main.tx_vce4.hide
+    main.cb_vce4.hide
+    main.tx_cluster4.hide
+    main.vn_cluster4.hide
+    main.ck_timefe4.hide
+    main.tx_note4.hide
+END
+
+SCRIPT baseline_model4_remove
+BEGIN
+    script baseline_model4_collapse
+    main.gb4.hide
+    main.bu_expand4.hide
+    main.tx_collapsed4.hide
+    main.vn_y4.setvalue ""
+    main.vl_x4.setvalue ""
+    main.vl_controls4.setvalue ""
+    main.vl_absorb4.setvalue ""
+    main.vn_panel4.setvalue ""
+    main.vn_time4.setvalue ""
+    main.vn_cluster4.setvalue ""
+    main.ed_if4.setvalue ""
+END
+
+SUBMIT sub1, label("运行并导出")
+HELP hlp1, view("help journalone")
+RESET res1
+
+PROGRAM baseline_model1_output
+BEGIN
+    if main.vn_y1.isneq("") {
+        put "model("
+        if main.cb_model1.iseq("普通最小二乘 OLS") {
+            put "ols"
+        }
+        if main.cb_model1.iseq("高维固定效应 HDFE") {
+            put "hdfe"
+        }
+        if main.cb_model1.iseq("面板固定效应 FE") {
+            put "fe"
+        }
+        if main.cb_model1.iseq("面板随机效应 RE") {
+            put "re"
+        }
+        if main.cb_model1.iseq("简单双重差分 DID") {
+            put "did"
+        }
+        if main.cb_model1.iseq("两阶段最小二乘 IV") {
+            put "iv"
+        }
+        put ") depvar(" /hidden main.vn_y1 ")"
+        if main.vl_x1.isneq("") {
+            put " indepvars(" /hidden main.vl_x1 ")"
+        }
+        if main.vl_controls1.isneq("") {
+            put " controls(" /hidden main.vl_controls1 ")"
+        }
+        if main.vn_panel1.isneq("") {
+            put " panel(" /hidden main.vn_panel1 ")"
+        }
+        if main.vn_time1.isneq("") {
+            put " time(" /hidden main.vn_time1 ")"
+        }
+        if main.vl_absorb1.isneq("") {
+            put " absorb(" /hidden main.vl_absorb1 ")"
+        }
+        if main.ck_timefe1 & main.vn_time1.isneq("") {
+            put " timefe"
+        }
+        if main.ed_if1.isneq("") {
+            put " ifcond(" /hidden main.ed_if1 ")"
+        }
+        put " vcetype("
+        if main.cb_vce1.iseq("常规标准误") {
+            put "conventional"
+        }
+        if main.cb_vce1.iseq("异方差稳健") {
+            put "robust"
+        }
+        if main.cb_vce1.iseq("聚类稳健") {
+            put "cluster"
+        }
+        put ")"
+        if main.vn_cluster1.isneq("") {
+            put " cluster(" /hidden main.vn_cluster1 ")"
+        }
+    }
+END
+
+PROGRAM baseline_model2_output
+BEGIN
+    if main.vn_y2.isneq("") {
+        put "model2("
+        if main.cb_model2.iseq("普通最小二乘 OLS") {
+            put "ols"
+        }
+        if main.cb_model2.iseq("高维固定效应 HDFE") {
+            put "hdfe"
+        }
+        if main.cb_model2.iseq("面板固定效应 FE") {
+            put "fe"
+        }
+        if main.cb_model2.iseq("面板随机效应 RE") {
+            put "re"
+        }
+        if main.cb_model2.iseq("简单双重差分 DID") {
+            put "did"
+        }
+        if main.cb_model2.iseq("两阶段最小二乘 IV") {
+            put "iv"
+        }
+        put ") depvar2(" /hidden main.vn_y2 ")"
+        if main.vl_x2.isneq("") {
+            put " indepvars2(" /hidden main.vl_x2 ")"
+        }
+        if main.vl_controls2.isneq("") {
+            put " controls2(" /hidden main.vl_controls2 ")"
+        }
+        if main.vn_panel2.isneq("") {
+            put " panel2(" /hidden main.vn_panel2 ")"
+        }
+        if main.vn_time2.isneq("") {
+            put " time2(" /hidden main.vn_time2 ")"
+        }
+        if main.vl_absorb2.isneq("") {
+            put " absorb2(" /hidden main.vl_absorb2 ")"
+        }
+        if main.ck_timefe2 & main.vn_time2.isneq("") {
+            put " timefe2"
+        }
+        if main.ed_if2.isneq("") {
+            put " ifcond2(" /hidden main.ed_if2 ")"
+        }
+        put " vcetype2("
+        if main.cb_vce2.iseq("常规标准误") {
+            put "conventional"
+        }
+        if main.cb_vce2.iseq("异方差稳健") {
+            put "robust"
+        }
+        if main.cb_vce2.iseq("聚类稳健") {
+            put "cluster"
+        }
+        put ")"
+        if main.vn_cluster2.isneq("") {
+            put " cluster2(" /hidden main.vn_cluster2 ")"
+        }
+    }
+END
+
+PROGRAM baseline_model3_output
+BEGIN
+    if main.vn_y3.isneq("") {
+        put "model3("
+        if main.cb_model3.iseq("普通最小二乘 OLS") {
+            put "ols"
+        }
+        if main.cb_model3.iseq("高维固定效应 HDFE") {
+            put "hdfe"
+        }
+        if main.cb_model3.iseq("面板固定效应 FE") {
+            put "fe"
+        }
+        if main.cb_model3.iseq("面板随机效应 RE") {
+            put "re"
+        }
+        if main.cb_model3.iseq("简单双重差分 DID") {
+            put "did"
+        }
+        if main.cb_model3.iseq("两阶段最小二乘 IV") {
+            put "iv"
+        }
+        put ") depvar3(" /hidden main.vn_y3 ")"
+        if main.vl_x3.isneq("") {
+            put " indepvars3(" /hidden main.vl_x3 ")"
+        }
+        if main.vl_controls3.isneq("") {
+            put " controls3(" /hidden main.vl_controls3 ")"
+        }
+        if main.vn_panel3.isneq("") {
+            put " panel3(" /hidden main.vn_panel3 ")"
+        }
+        if main.vn_time3.isneq("") {
+            put " time3(" /hidden main.vn_time3 ")"
+        }
+        if main.vl_absorb3.isneq("") {
+            put " absorb3(" /hidden main.vl_absorb3 ")"
+        }
+        if main.ck_timefe3 & main.vn_time3.isneq("") {
+            put " timefe3"
+        }
+        if main.ed_if3.isneq("") {
+            put " ifcond3(" /hidden main.ed_if3 ")"
+        }
+        put " vcetype3("
+        if main.cb_vce3.iseq("常规标准误") {
+            put "conventional"
+        }
+        if main.cb_vce3.iseq("异方差稳健") {
+            put "robust"
+        }
+        if main.cb_vce3.iseq("聚类稳健") {
+            put "cluster"
+        }
+        put ")"
+        if main.vn_cluster3.isneq("") {
+            put " cluster3(" /hidden main.vn_cluster3 ")"
+        }
+    }
+END
+
+PROGRAM baseline_model4_output
+BEGIN
+    if main.vn_y4.isneq("") {
+        put "model4("
+        if main.cb_model4.iseq("普通最小二乘 OLS") {
+            put "ols"
+        }
+        if main.cb_model4.iseq("高维固定效应 HDFE") {
+            put "hdfe"
+        }
+        if main.cb_model4.iseq("面板固定效应 FE") {
+            put "fe"
+        }
+        if main.cb_model4.iseq("面板随机效应 RE") {
+            put "re"
+        }
+        if main.cb_model4.iseq("简单双重差分 DID") {
+            put "did"
+        }
+        if main.cb_model4.iseq("两阶段最小二乘 IV") {
+            put "iv"
+        }
+        put ") depvar4(" /hidden main.vn_y4 ")"
+        if main.vl_x4.isneq("") {
+            put " indepvars4(" /hidden main.vl_x4 ")"
+        }
+        if main.vl_controls4.isneq("") {
+            put " controls4(" /hidden main.vl_controls4 ")"
+        }
+        if main.vn_panel4.isneq("") {
+            put " panel4(" /hidden main.vn_panel4 ")"
+        }
+        if main.vn_time4.isneq("") {
+            put " time4(" /hidden main.vn_time4 ")"
+        }
+        if main.vl_absorb4.isneq("") {
+            put " absorb4(" /hidden main.vl_absorb4 ")"
+        }
+        if main.ck_timefe4 & main.vn_time4.isneq("") {
+            put " timefe4"
+        }
+        if main.ed_if4.isneq("") {
+            put " ifcond4(" /hidden main.ed_if4 ")"
+        }
+        put " vcetype4("
+        if main.cb_vce4.iseq("常规标准误") {
+            put "conventional"
+        }
+        if main.cb_vce4.iseq("异方差稳健") {
+            put "robust"
+        }
+        if main.cb_vce4.iseq("聚类稳健") {
+            put "cluster"
+        }
+        put ")"
+        if main.vn_cluster4.isneq("") {
+            put " cluster4(" /hidden main.vn_cluster4 ")"
+        }
+    }
+END
+
+PROGRAM oneclick_update
+BEGIN
+    put "journalone_update"
+    stata hidden immediate
+    if _rc {
+        stopbox stop "更新失败；请检查网络或插件发布地址。"
+    }
+    else {
+        stopbox note "更新完成。重新打开插件即可使用新版。"
+        close
+    }
+END
+
+PROGRAM command
+BEGIN
+    if main.ed_license.isneq("") {
+        put "journalone_license, activate(" `"""' main.ed_license `"""' ")"
+        stata hidden immediate
+        if _rc {
+            stopbox stop "授权密钥无效；请向插件发布者获取正确密钥。"
+        }
+        call main.ed_license.setvalue ""
+    }
+    put "journalone,"
+    if main.ck_desc | main.vl_desc.isneq("") {
+        if main.vl_desc.isneq("") {
+            put " descvars("
+            put main.vl_desc
+            put ")"
+        }
+    }
+    else {
+        put " nodesc"
+    }
+    put " " /program baseline_model1_output
+    put " " /program baseline_model2_output
+    put " " /program baseline_model3_output
+    put " " /program baseline_model4_output
+
+    put " level("
+    put main.cb_level
+    put ")"
+
+    if more.vn_treat.isneq("") {
+        put " treat("
+        put more.vn_treat
+        put ")"
+    }
+    if more.vn_post.isneq("") {
+        put " post("
+        put more.vn_post
+        put ")"
+    }
+    if main.vl_endog.isneq("") {
+        put " endog("
+        put main.vl_endog
+        put ")"
+    }
+    if main.vl_instruments.isneq("") {
+        put " instruments("
+        put main.vl_instruments
+        put ")"
+    }
+
+    if main.vl_alty.isneq("") {
+        put " alty("
+        put main.vl_alty
+        put ")"
+    }
+    if main.vl_altx.isneq("") {
+        put " altx("
+        put main.vl_altx
+        put ")"
+    }
+    if main.vl_addcontrols.isneq("") {
+        put " addcontrols("
+        put main.vl_addcontrols
+        put ")"
+    }
+    if main.vl_addfe.isneq("") {
+        put " addfe("
+        put main.vl_addfe
+        put ")"
+    }
+    if main.ed_lags.isneq("") {
+        put " lags("
+        put main.ed_lags
+        put ")"
+    }
+    if main.ed_leads.isneq("") {
+        put " leads("
+        put main.ed_leads
+        put ")"
+    }
+    if main.ed_subsample.isneq("") {
+        put " subsample("
+        put main.ed_subsample
+        put ")"
+    }
+    if more.cb_altvce.isneq("不运行") {
+        put " altvce("
+        if more.cb_altvce.iseq("常规标准误") {
+            put "conventional"
+        }
+        if more.cb_altvce.iseq("异方差稳健") {
+            put "robust"
+        }
+        if more.cb_altvce.iseq("聚类稳健") {
+            put "cluster"
+        }
+        put ")"
+    }
+    if more.vn_altcluster.isneq("") {
+        put " altcluster("
+        put more.vn_altcluster
+        put ")"
+    }
+
+    if main.vl_mediators.isneq("") {
+        put " mediators("
+        put main.vl_mediators
+        put ")"
+    }
+    if main.vl_moderators.isneq("") {
+        put " moderators("
+        put main.vl_moderators
+        put ")"
+    }
+    if main.vn_group.isneq("") {
+        put " group("
+        put main.vn_group
+        put ")"
+    }
+
+    if more.cb_sample.iseq("全体筛选样本") {
+        put " descsample(full)"
+    }
+    if more.cb_report.iseq("生成DOCX") {
+        put " reportmode(docx)"
+    }
+    if more.cb_report.iseq("生成并打开DOCX") {
+        put " reportmode(docx_open)"
+    }
+    if more.ed_decimals.isneq("") {
+        put " decimals("
+        put more.ed_decimals
+        put ")"
+    }
+    if more.cb_statistic.iseq("t值") {
+        put " statistic(t)"
+    }
+    if more.cb_missing.iseq("已在预处理完成") {
+        put " missingmode(preprocessed)"
+    }
+    if more.ck_ptrend {
+        put " ptrend ptlevel("
+        put more.cb_ptlevel
+        put ")"
+        if more.ed_ptbase.isneq("") {
+            put " ptbase("
+            put more.ed_ptbase
+            put ")"
+        }
+    }
+    if more.cb_psm_method.isneq("不运行") {
+        put " psmmethod("
+        if more.cb_psm_method.iseq("近邻匹配") {
+            put "nearest"
+        }
+        if more.cb_psm_method.iseq("半径匹配") {
+            put "radius"
+        }
+        if more.cb_psm_method.iseq("核匹配") {
+            put "kernel"
+        }
+        put ")"
+        if more.vl_psm_covars.isneq("") {
+            put " psmcovars("
+            put more.vl_psm_covars
+            put ")"
+        }
+        if more.vn_psm_time.isneq("") {
+            put " psmtime("
+            put more.vn_psm_time
+            put ")"
+        }
+        if more.ed_psmneighbor.isneq("") {
+            put " psmneighbor("
+            put more.ed_psmneighbor
+            put ")"
+        }
+    }
+    if more.vn_heckman_sel.isneq("") {
+        put " heckmansel("
+        put more.vn_heckman_sel
+        put ")"
+    }
+    if more.vl_heckman_covars.isneq("") {
+        put " heckmancovars("
+        put more.vl_heckman_covars
+        put ")"
+    }
+    if more.ck_heckman_fe & more.vn_heckman_sel.isneq("") {
+        put " heckmanfe"
+    }
+    if more.cb_gmm_method.isneq("不运行") {
+        put " gmmmethod("
+        if more.cb_gmm_method.iseq("差分GMM") {
+            put "difference"
+        }
+        if more.cb_gmm_method.iseq("系统GMM") {
+            put "system"
+        }
+        put ")"
+        if more.vl_gmm_extra.isneq("") {
+            put " gmmextra("
+            put more.vl_gmm_extra
+            put ")"
+        }
+        if more.ed_gmm_lags.isneq("") {
+            put " gmmlags("
+            put more.ed_gmm_lags
+            put ")"
+        }
+        if more.ck_gmm_twostep {
+            put " gmmtwostep"
+        }
+    }
+    if more.cb_dml_method.isneq("不运行") {
+        put " dmlmethod("
+        if more.cb_dml_method.iseq("部分线性DML") {
+            put "partial"
+        }
+        if more.cb_dml_method.iseq("DML-IV") {
+            put "iv"
+        }
+        put ")"
+        if more.vl_dml_iv.isneq("") {
+            put " dmlinstruments("
+            put more.vl_dml_iv
+            put ")"
+        }
+        if more.vl_dml_controls.isneq("") {
+            put " dmlcontrols("
+            put more.vl_dml_controls
+            put ")"
+        }
+        if more.ed_dml_folds.isneq("") {
+            put " dmlfolds("
+            put more.ed_dml_folds
+            put ")"
+        }
+    }
+    if more.ed_group_bins.isneq("") {
+        put " groupbins("
+        put more.ed_group_bins
+        put ")"
+    }
+    if more.ck_split_hetero {
+        put " splithet"
+    }
+    if more.ck_group_test {
+        put " grouptest"
+    }
+    if more.cb_med_method.iseq("不运行") {
+        put " medmethod(none)"
+    }
+    if more.ck_split_med {
+        put " splitmed"
+    }
+    if more.ck_mod_plot {
+        put " modplot"
+    }
+    if more.cb_adjust.iseq("临时缩尾") {
+        put " adjustmethod(winsor)"
+        put " winsorlow("
+        put more.ed_winsor_low
+        put ") winsorhigh("
+        put more.ed_winsor_high
+        put ")"
+    }
+    if more.ed_pstar1.isneq("") {
+        put " pstar1("
+        put more.ed_pstar1
+        put ")"
+    }
+    if more.ed_pstar2.isneq("") {
+        put " pstar2("
+        put more.ed_pstar2
+        put ")"
+    }
+    if more.ed_pstar3.isneq("") {
+        put " pstar3("
+        put more.ed_pstar3
+        put ")"
+    }
+    if more.ed_reps.isneq("") {
+        put " reps("
+        put more.ed_reps
+        put ")"
+    }
+
+    if more.ed_outdir.isneq("") {
+        put " outdir("
+        put more.ed_outdir
+        put ")"
+    }
+    if more.ed_prefix.isneq("") {
+        put " prefix("
+        put more.ed_prefix
+        put ")"
+    }
+    if more.ed_seed.isneq("") {
+        put " seed("
+        put more.ed_seed
+        put ")"
+    }
+END
+
+LIST model_list
+BEGIN
+    普通最小二乘 OLS
+    高维固定效应 HDFE
+    面板固定效应 FE
+    面板随机效应 RE
+    简单双重差分 DID
+    两阶段最小二乘 IV
+END
+
+LIST vce_list
+BEGIN
+    常规标准误
+    异方差稳健
+    聚类稳健
+END
+
+LIST altvce_list
+BEGIN
+    不运行
+    常规标准误
+    异方差稳健
+    聚类稳健
+END
+
+LIST level_list
+BEGIN
+    95
+    90
+    99
+END
+
+LIST sample_list
+BEGIN
+    基准估计样本
+    全体筛选样本
+END
+
+LIST report_list
+BEGIN
+    不生成文档
+    生成DOCX
+    生成并打开DOCX
+END
+
+LIST missing_list
+BEGIN
+    模型完整案例
+    已在预处理完成
+END
+
+LIST statistic_list
+BEGIN
+    标准误
+    t值
+END
+
+LIST psm_list
+BEGIN
+    不运行
+    近邻匹配
+    半径匹配
+    核匹配
+END
+
+LIST gmm_list
+BEGIN
+    不运行
+    差分GMM
+    系统GMM
+END
+
+LIST dml_list
+BEGIN
+    不运行
+    部分线性DML
+    DML-IV
+END
+
+LIST med_list
+BEGIN
+    三步法
+    不运行
+END
+
+LIST adjust_list
+BEGIN
+    不处理
+    临时缩尾
+END
