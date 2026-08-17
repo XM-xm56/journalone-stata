@@ -2,6 +2,17 @@
 VERSION 15.0
 POSITION 0 0 1020 650
 
+SCRIPT PREINIT
+BEGIN
+    create DOUBLE license_gate_state
+    license_gate_state.setvalue global JOURNALONE_LICENSE_VALID
+END
+
+SCRIPT POSTINIT
+BEGIN
+    program license_gate_dispatch
+END
+
 DIALOG main, title("一键数据清洗")
 BEGIN
     GROUPBOX gb_import 15 15 490 125, label("导入与合并")
@@ -58,9 +69,12 @@ BEGIN
     TEXT tx_prefix 340 @ 55 ., label("前缀：")
     EDIT ed_prefix 400 @ 85 ., default("prep")
     CHECKBOX ck_save 30 617 235 ., label("保存清洗后的数据副本 (.dta)") default(1)
-    TEXT tx_license 660 18 45 ., label("密钥：")
-    EDIT ed_license 710 @ 165 ., nomemory password max(64) ///
+    TEXT tx_license 625 18 45 ., label("密钥：")
+    EDIT ed_license 670 @ 120 ., nomemory password max(64) ///
         tooltip("首次使用时输入发布者提供的授权密钥；验证成功后本机留空也可运行")
+    BUTTON bu_activate 795 18 90 ., label("激活并解锁") ///
+        tooltip("验证密钥并立即解锁本窗口的全部数据处理功能") ///
+        onpush(program activate_license)
     BUTTON bu_update 890 18 105 ., label("一键更新") ///
         onpush(program oneclick_update)
 
@@ -130,9 +144,136 @@ BEGIN
         label("规则按顺序执行；若删除全部观测则停止，并自动恢复原始内存数据。")
 END
 
+SCRIPT license_gate_lock
+BEGIN
+    license_gate_state.setvalue 0
+    main.fi_mergefile.disable
+    main.vl_mergekey.disable
+    main.cb_mergetype.disable
+    main.vl_vars.disable
+    main.vn_id.disable
+    main.vn_time.disable
+    main.ed_keep.disable
+    main.cb_dup.disable
+    main.vl_dup_key.disable
+    main.cb_miss.disable
+    main.vl_miss_vars.disable
+    main.vl_miss_by.disable
+    main.ed_outdir.disable
+    main.ed_prefix.disable
+    main.ck_save.disable
+    main.vn_recode.disable
+    main.ed_recode_from.disable
+    main.ed_recode_to.disable
+    main.cb_out.disable
+    main.vl_out_vars.disable
+    main.vl_out_by.disable
+    main.ed_low.disable
+    main.ed_high.disable
+    main.vl_log.disable
+    main.cb_logmode.disable
+    main.vl_z.disable
+    main.vl_encode.disable
+    main.vl_destring.disable
+    main.vn_drop1.disable
+    main.cb_dropop1.disable
+    main.ed_dropvalue1.disable
+    main.vn_drop2.disable
+    main.cb_dropop2.disable
+    main.ed_dropvalue2.disable
+    main.vn_drop3.disable
+    main.cb_dropop3.disable
+    main.ed_dropvalue3.disable
+    main.ed_dropif.disable
+    main.ed_license.enable
+    main.bu_activate.setlabel "激活并解锁"
+    main.bu_activate.enable
+    main.bu_update.enable
+END
+
+SCRIPT license_gate_unlock
+BEGIN
+    license_gate_state.setvalue 1
+    main.fi_mergefile.enable
+    main.vl_mergekey.enable
+    main.cb_mergetype.enable
+    main.vl_vars.enable
+    main.vn_id.enable
+    main.vn_time.enable
+    main.ed_keep.enable
+    main.cb_dup.enable
+    main.vl_dup_key.enable
+    main.cb_miss.enable
+    main.vl_miss_vars.enable
+    main.vl_miss_by.enable
+    main.ed_outdir.enable
+    main.ed_prefix.enable
+    main.ck_save.enable
+    main.vn_recode.enable
+    main.ed_recode_from.enable
+    main.ed_recode_to.enable
+    main.cb_out.enable
+    main.vl_out_vars.enable
+    main.vl_out_by.enable
+    main.ed_low.enable
+    main.ed_high.enable
+    main.vl_log.enable
+    main.cb_logmode.enable
+    main.vl_z.enable
+    main.vl_encode.enable
+    main.vl_destring.enable
+    main.vn_drop1.enable
+    main.cb_dropop1.enable
+    main.ed_dropvalue1.enable
+    main.vn_drop2.enable
+    main.cb_dropop2.enable
+    main.ed_dropvalue2.enable
+    main.vn_drop3.enable
+    main.cb_dropop3.enable
+    main.ed_dropvalue3.enable
+    main.ed_dropif.enable
+    main.ed_license.enable
+    main.bu_activate.setlabel "已激活"
+    main.bu_activate.disable
+    main.bu_update.enable
+END
+
 SUBMIT sub1, label("运行并导出")
 HELP hlp1, view("help journalone_prep")
 RESET res1
+
+PROGRAM license_gate_dispatch
+BEGIN
+    if license_gate_state.iseq(1) {
+        call script license_gate_unlock
+    }
+    else {
+        call script license_gate_lock
+    }
+END
+
+PROGRAM activate_license
+BEGIN
+    if main.ed_license.iseq("") {
+        put "_journalone_require_license"
+        stata hidden immediate
+        if _rc {
+            stopbox stop "尚未检测到有效授权；请输入发布者提供的密钥。"
+        }
+        call script license_gate_unlock
+        stopbox note "已检测到本机有效授权；数据预处理功能已解锁。"
+        exit
+    }
+    put "journalone_license, activate(" `""""' main.ed_license `""""' ")"
+    stata hidden immediate
+    if _rc {
+        call script license_gate_lock
+        stopbox stop "授权密钥无效；数据处理功能仍处于锁定状态。"
+    }
+    call main.ed_license.setvalue ""
+    call script license_gate_unlock
+    stopbox note "授权成功；数据预处理功能已解锁。"
+END
 
 PROGRAM oneclick_update
 BEGIN
@@ -156,6 +297,13 @@ BEGIN
             stopbox stop "授权密钥无效；请向插件发布者获取正确密钥。"
         }
         call main.ed_license.setvalue ""
+        call script license_gate_unlock
+    }
+    put "_journalone_require_license"
+    stata hidden immediate
+    if _rc {
+        call script license_gate_lock
+        stopbox stop "JournalOne 尚未激活；请输入有效密钥并点击“激活并解锁”。"
     }
     put "journalone_prep,"
 

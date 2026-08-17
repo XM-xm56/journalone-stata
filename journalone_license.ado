@@ -1,4 +1,4 @@
-*! version 0.2.0 16aug2026 JournalOne license activation
+*! version 0.3.0 18aug2026 JournalOne license activation
 
 capture program drop journalone_license
 program define journalone_license
@@ -25,6 +25,7 @@ program define journalone_license
         local supplied_digest `"`r(digest)'"'
         quietly _journalone_license_allowed, digest("`supplied_digest'")
         if r(valid) != 1 {
+            quietly _journalone_license_read
             display as error "授权密钥无效，JournalOne 未激活。"
             exit 198
         }
@@ -35,6 +36,7 @@ program define journalone_license
         file write __jo_lic_write "digest=`supplied_digest'" _n
         file write __jo_lic_write "activated=`c(current_date)' `c(current_time)'" _n
         file close __jo_lic_write
+        global JOURNALONE_LICENSE_VALID 1
         display as result "JournalOne 授权成功。"
         display as text "授权文件：`path'"
         exit
@@ -42,6 +44,7 @@ program define journalone_license
 
     if `"`deactivate'"' != "" {
         capture erase `"`path'"'
+        global JOURNALONE_LICENSE_VALID 0
         if _rc == 0 display as result "JournalOne 授权已移除。"
         else display as text "未找到授权文件。"
         exit

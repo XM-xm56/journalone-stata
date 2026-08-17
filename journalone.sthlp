@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.12 17aug2026}{...}
+{* *! version 0.9.13 18aug2026}{...}
 {vieweralsosee "JournalOne authorization" "help journalone_license"}{...}
 {vieweralsosee "JournalOne one-click update" "help journalone_update"}{...}
 {vieweralsosee "JournalOne preprocessing" "help journalone_prep"}{...}
@@ -284,7 +284,7 @@
 {p 8 12 2}{cmd:. journalone_license, status}{p_end}
 {p 8 12 2}{cmd:. journalone_update}{p_end}
 
-{pstd}安装包不包含明文密钥。首次使用可直接在“实证分析”“数据预处理”或“显著组合”页面的密码掩码输入栏填写发布者提供的密钥；页面先隐藏验证命令，再运行分析，密钥不会写入输出文件。验证成功后本机可以留空继续运行。未激活时公共 JournalOne 命令会在估计前终止。纯本地 ado 校验用于普通访问控制，不是不可绕过的 DRM。{p_end}
+{pstd}安装包不包含明文密钥。首次使用可直接在“实证分析”“数据预处理”或“显著组合”页面的密码掩码输入栏填写发布者提供的密钥，然后点击“激活并解锁”。未激活时，变量选择框、分析选项和基准回归设置均被禁用；即使已经载入或更换数据也不会解锁。验证成功后控件立即启用，本机后续可以留空运行。页面使用隐藏验证命令，密钥不会写入输出文件；公共 JournalOne 命令仍会在后端再次校验授权。纯本地 ado 校验用于普通访问控制，不是不可绕过的 DRM。{p_end}
 
 {pstd}三个插件页面均提供“一键更新”。该入口无需授权，自动使用首次安装时记录的来源覆盖公共包文件；更新完成后关闭并重新打开当前窗口即可。发布者私有的 Excel 密钥库不会被下载。{p_end}
 

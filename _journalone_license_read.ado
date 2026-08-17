@@ -1,16 +1,18 @@
-*! version 0.2.0 16aug2026 JournalOne license reader
+*! version 0.3.0 18aug2026 JournalOne license reader
 capture program drop _journalone_license_read
 program define _journalone_license_read, rclass
     version 16.0
     quietly _journalone_license_path
     local path `"`r(path)'"'
     if `"`path'"' == "" {
+        global JOURNALONE_LICENSE_VALID 0
         return scalar valid = 0
         exit
     }
 
     capture confirm file `"`path'"'
     if _rc {
+        global JOURNALONE_LICENSE_VALID 0
         return scalar valid = 0
         exit
     }
@@ -19,6 +21,7 @@ program define _journalone_license_read, rclass
     capture file close __jo_lic_read
     capture file open __jo_lic_read using `"`path'"', read text
     if _rc {
+        global JOURNALONE_LICENSE_VALID 0
         return scalar valid = 0
         exit
     }
@@ -34,6 +37,8 @@ program define _journalone_license_read, rclass
     quietly _journalone_license_allowed, digest("`stored'")
     local allowed `"`r(digests)'"'
     local is_valid = r(valid)
+    if `is_valid' == 1 global JOURNALONE_LICENSE_VALID 1
+    else global JOURNALONE_LICENSE_VALID 0
     return scalar valid = `is_valid'
     return local digest `"`stored'"'
     return local digests `"`allowed'"'

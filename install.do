@@ -1,4 +1,4 @@
-*! JournalOne one-command installer 0.9.12 17aug2026
+*! JournalOne one-command installer 0.9.13 18aug2026
 version 16.0
 
 * The optional first argument is used only by local/release tests.  Ordinary

@@ -2,6 +2,17 @@
 VERSION 15.0
 POSITION 0 0 1020 650
 
+SCRIPT PREINIT
+BEGIN
+    create DOUBLE license_gate_state
+    license_gate_state.setvalue global JOURNALONE_LICENSE_VALID
+END
+
+SCRIPT POSTINIT
+BEGIN
+    program license_gate_dispatch
+END
+
 DIALOG combo_main, title("显著组合") tabtitle("显著组合")
 BEGIN
     TEXT tx_select 20 10 90 ., label("模型选择：")
@@ -10,6 +21,9 @@ BEGIN
     TEXT tx_key 330 @ 45 ., label("密钥：")
     EDIT ed_key 375 @ 145 ., nomemory password max(64) ///
         tooltip("首次使用时输入发布者提供的授权密钥；验证成功后本机留空也可运行")
+    BUTTON bu_activate 530 10 95 ., label("激活并解锁") ///
+        tooltip("验证密钥并立即解锁本窗口的全部诊断功能") ///
+        onpush(program activate_license)
     BUTTON bu_update 880 10 115 ., label("一键更新") ///
         onpush(program oneclick_update)
 
@@ -112,9 +126,134 @@ BEGIN
         label("注：Y是被解释变量，X是解释变量，W是调节变量，M是中介变量。")
 END
 
+SCRIPT license_gate_lock
+BEGIN
+    license_gate_state.setvalue 0
+    combo_main.cb_select.disable
+    combo_main.vn_y.disable
+    combo_main.vl_x.disable
+    combo_main.cb_vce.disable
+    combo_main.vl_fe.disable
+    combo_main.vn_cluster.disable
+    combo_main.vn_panel.disable
+    combo_main.vl_keep.disable
+    combo_main.vl_candidate.disable
+    combo_main.vn_time.disable
+    combo_main.vl_altx.disable
+    combo_main.vl_alty.disable
+    combo_main.ed_lags.disable
+    combo_main.ed_leads.disable
+    combo_main.ed_subsample.disable
+    combo_main.cb_altvce.disable
+    combo_main.vl_addfe.disable
+    combo_main.ed_policy.disable
+    combo_main.vl_addcontrols.disable
+    combo_main.ck_ptrend.disable
+    combo_main.ed_placebo.disable
+    combo_main.cb_altmodel.disable
+    combo_main.vl_mediator.disable
+    combo_main.vl_moderator.disable
+    combo_main.vn_group.disable
+    combo_main.ed_dimension.disable
+    combo_main.vn_hety.disable
+    combo_main.vl_hetx.disable
+    combo_main.ed_output.disable
+    combo_main.ed_prefix.disable
+    combo_more.cb_xy.disable
+    combo_more.cb_xm.disable
+    combo_more.cb_xwy.disable
+    combo_more.cb_baselevel.disable
+    combo_more.cb_medlevel.disable
+    combo_more.cb_modlevel.disable
+    combo_more.ed_mincontrols.disable
+    combo_main.ed_key.enable
+    combo_main.bu_activate.setlabel "激活并解锁"
+    combo_main.bu_activate.enable
+    combo_main.bu_update.enable
+END
+
+SCRIPT license_gate_unlock
+BEGIN
+    license_gate_state.setvalue 1
+    combo_main.cb_select.enable
+    combo_main.vn_y.enable
+    combo_main.vl_x.enable
+    combo_main.cb_vce.enable
+    combo_main.vl_fe.enable
+    combo_main.vn_cluster.enable
+    combo_main.vn_panel.enable
+    combo_main.vl_keep.enable
+    combo_main.vl_candidate.enable
+    combo_main.vn_time.enable
+    combo_main.vl_altx.enable
+    combo_main.vl_alty.enable
+    combo_main.ed_lags.enable
+    combo_main.ed_leads.enable
+    combo_main.ed_subsample.enable
+    combo_main.cb_altvce.enable
+    combo_main.vl_addfe.enable
+    combo_main.ed_policy.enable
+    combo_main.vl_addcontrols.enable
+    combo_main.ck_ptrend.enable
+    combo_main.ed_placebo.enable
+    combo_main.cb_altmodel.enable
+    combo_main.vl_mediator.enable
+    combo_main.vl_moderator.enable
+    combo_main.vn_group.enable
+    combo_main.ed_dimension.enable
+    combo_main.vn_hety.enable
+    combo_main.vl_hetx.enable
+    combo_main.ed_output.enable
+    combo_main.ed_prefix.enable
+    combo_more.cb_xy.enable
+    combo_more.cb_xm.enable
+    combo_more.cb_xwy.enable
+    combo_more.cb_baselevel.enable
+    combo_more.cb_medlevel.enable
+    combo_more.cb_modlevel.enable
+    combo_more.ed_mincontrols.enable
+    combo_main.ed_key.enable
+    combo_main.bu_activate.setlabel "已激活"
+    combo_main.bu_activate.disable
+    combo_main.bu_update.enable
+END
+
 SUBMIT sub1, label("运行显著组合诊断")
 HELP hlp1, view("help journalone_signif")
 RESET res1
+
+PROGRAM license_gate_dispatch
+BEGIN
+    if license_gate_state.iseq(1) {
+        call script license_gate_unlock
+    }
+    else {
+        call script license_gate_lock
+    }
+END
+
+PROGRAM activate_license
+BEGIN
+    if combo_main.ed_key.iseq("") {
+        put "_journalone_require_license"
+        stata hidden immediate
+        if _rc {
+            stopbox stop "尚未检测到有效授权；请输入发布者提供的密钥。"
+        }
+        call script license_gate_unlock
+        stopbox note "已检测到本机有效授权；显著组合功能已解锁。"
+        exit
+    }
+    put "journalone_license, activate(" `""""' combo_main.ed_key `""""' ")"
+    stata hidden immediate
+    if _rc {
+        call script license_gate_lock
+        stopbox stop "授权密钥无效；显著组合功能仍处于锁定状态。"
+    }
+    call combo_main.ed_key.setvalue ""
+    call script license_gate_unlock
+    stopbox note "授权成功；显著组合功能已解锁。"
+END
 
 PROGRAM oneclick_update
 BEGIN
@@ -138,6 +277,13 @@ BEGIN
             stopbox stop "授权密钥无效；请向插件发布者获取正确密钥。"
         }
         call combo_main.ed_key.setvalue ""
+        call script license_gate_unlock
+    }
+    put "_journalone_require_license"
+    stata hidden immediate
+    if _rc {
+        call script license_gate_lock
+        stopbox stop "JournalOne 尚未激活；请输入有效密钥并点击“激活并解锁”。"
     }
     put "journalone_signif,"
     if combo_main.cb_select.iseq("分析不显著原因") put " select(reason)"

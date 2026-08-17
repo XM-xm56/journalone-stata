@@ -15,7 +15,7 @@
 
 {p 8 12 2}{cmd:. journalone_prep}{p_end}
 
-{pstd}首次使用可在页面“输出与复现”区域的“密钥”输入栏直接填写发布者提供的授权密钥，也可通过 {help journalone_license} 激活。输入栏使用密码掩码且不记忆。{p_end}
+{pstd}首次使用可在页面“输出与复现”区域的“密钥”输入栏填写发布者提供的授权密钥，然后点击“激活并解锁”，也可通过 {help journalone_license} 激活。未激活时全部导入、清洗、筛选和输出设置均不可编辑，载入数据不会自动解锁。输入栏使用密码掩码且不记忆。{p_end}
 {p 8 12 2}{cmd:. db journalone_prep}{p_end}
 
 {title:Syntax}

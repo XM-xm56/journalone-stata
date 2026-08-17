@@ -6,6 +6,8 @@ SCRIPT PREINIT
 BEGIN
     create DOUBLE baseline_model_count
     baseline_model_count.setvalue 1
+    create DOUBLE license_gate_state
+    license_gate_state.setvalue global JOURNALONE_LICENSE_VALID
 END
 
 SCRIPT POSTINIT
@@ -15,6 +17,7 @@ BEGIN
     script baseline_model4_remove
     script baseline_count1
     script baseline_panel_collapse
+    program license_gate_dispatch
 END
 
 DIALOG main, title("实证分析") tabtitle("实证分析")
@@ -209,9 +212,12 @@ BEGIN
     TEXT tx_diagnostics_note 30 545 940 ., ///
         label("各项可单独选择；结果另存为标准RTF、可复现DO和CSV，不按显著性筛选。")
 
-    TEXT tx_license 600 10 45 ., label("密钥：")
-    EDIT ed_license 650 8 160 ., nomemory password max(64) ///
+    TEXT tx_license 585 10 45 ., label("密钥：")
+    EDIT ed_license 630 8 145 ., nomemory password max(64) ///
         tooltip("首次使用时输入发布者提供的授权密钥；验证成功后本机留空也可运行")
+    BUTTON bu_activate 780 7 95 ., label("激活并解锁") ///
+        tooltip("验证密钥并立即解锁本窗口的全部分析功能") ///
+        onpush(program activate_license)
 END
 
 DIALOG more, tabtitle("更多选项")
@@ -326,6 +332,264 @@ BEGIN
 
     TEXT tx_output_note 30 465 950 20, ///
         label("所有调整均在临时副本中执行；原始内存数据、变量顺序和数据签名会被复核。")
+END
+
+/* A loaded dataset never unlocks the interface.  Only a valid local
+   JournalOne authorization enables analysis controls. */
+SCRIPT license_gate_lock
+BEGIN
+    license_gate_state.setvalue 0
+    main.tx_base_tab_note.setlabel "未激活：请输入密钥并点击“激活并解锁”。"
+    main.cb_level.disable
+    main.ck_desc.disable
+    main.vl_desc.disable
+    main.bu_base_open.disable
+    main.bu_add.disable
+    main.bu_remove.disable
+    main.bu_base_close.disable
+    main.bu_collapse1.disable
+    main.bu_expand1.disable
+    main.cb_model1.disable
+    main.vn_y1.disable
+    main.cb_vce1.disable
+    main.vl_x1.disable
+    main.ed_if1.disable
+    main.vl_controls1.disable
+    main.vl_absorb1.disable
+    main.vn_panel1.disable
+    main.vn_time1.disable
+    main.vn_cluster1.disable
+    main.ck_timefe1.disable
+    main.bu_collapse2.disable
+    main.bu_expand2.disable
+    main.cb_model2.disable
+    main.vn_y2.disable
+    main.cb_vce2.disable
+    main.vl_x2.disable
+    main.ed_if2.disable
+    main.vl_controls2.disable
+    main.vl_absorb2.disable
+    main.vn_panel2.disable
+    main.vn_time2.disable
+    main.vn_cluster2.disable
+    main.ck_timefe2.disable
+    main.bu_collapse3.disable
+    main.bu_expand3.disable
+    main.cb_model3.disable
+    main.vn_y3.disable
+    main.cb_vce3.disable
+    main.vl_x3.disable
+    main.ed_if3.disable
+    main.vl_controls3.disable
+    main.vl_absorb3.disable
+    main.vn_panel3.disable
+    main.vn_time3.disable
+    main.vn_cluster3.disable
+    main.ck_timefe3.disable
+    main.bu_collapse4.disable
+    main.bu_expand4.disable
+    main.cb_model4.disable
+    main.vn_y4.disable
+    main.cb_vce4.disable
+    main.vl_x4.disable
+    main.ed_if4.disable
+    main.vl_controls4.disable
+    main.vl_absorb4.disable
+    main.vn_panel4.disable
+    main.vn_time4.disable
+    main.vn_cluster4.disable
+    main.ck_timefe4.disable
+    main.vl_alty.disable
+    main.vl_altx.disable
+    main.vl_addcontrols.disable
+    main.vl_addfe.disable
+    main.ed_lags.disable
+    main.ed_leads.disable
+    main.ed_subsample.disable
+    main.vl_endog.disable
+    main.vl_instruments.disable
+    main.vl_mediators.disable
+    main.vl_moderators.disable
+    main.vn_group.disable
+    main.vl_corr.disable
+    main.ck_vif.disable
+    main.ck_paneltests.disable
+    main.ck_ivtests.disable
+    more.cb_sample.disable
+    more.cb_report.disable
+    more.ed_decimals.disable
+    more.cb_missing.disable
+    more.cb_statistic.disable
+    more.ed_seed.disable
+    more.vn_treat.disable
+    more.vn_post.disable
+    more.ck_ptrend.disable
+    more.cb_ptlevel.disable
+    more.ed_ptbase.disable
+    more.cb_altvce.disable
+    more.vn_altcluster.disable
+    more.ed_psmneighbor.disable
+    more.cb_psm_method.disable
+    more.vn_psm_time.disable
+    more.vl_psm_covars.disable
+    more.vn_heckman_sel.disable
+    more.ck_heckman_fe.disable
+    more.vl_heckman_covars.disable
+    more.cb_gmm_method.disable
+    more.vl_gmm_extra.disable
+    more.ed_gmm_lags.disable
+    more.ck_gmm_twostep.disable
+    more.cb_dml_method.disable
+    more.vl_dml_iv.disable
+    more.vl_dml_controls.disable
+    more.ed_dml_folds.disable
+    more.ed_group_bins.disable
+    more.ck_split_hetero.disable
+    more.ck_group_test.disable
+    more.cb_med_method.disable
+    more.ck_split_med.disable
+    more.ck_mod_plot.disable
+    more.cb_adjust.disable
+    more.ed_winsor_low.disable
+    more.ed_winsor_high.disable
+    more.ed_pstar1.disable
+    more.ed_pstar2.disable
+    more.ed_pstar3.disable
+    more.ed_reps.disable
+    more.ed_prefix.disable
+    more.ed_outdir.disable
+    main.ed_license.enable
+    main.bu_activate.setlabel "激活并解锁"
+    main.bu_activate.enable
+    main.bu_update.enable
+END
+
+SCRIPT license_gate_unlock
+BEGIN
+    license_gate_state.setvalue 1
+    main.tx_base_tab_note.setlabel "空白模块跳过；基准回归可展开设置。"
+    main.cb_level.enable
+    main.ck_desc.enable
+    main.vl_desc.enable
+    main.bu_base_open.enable
+    main.bu_add.enable
+    main.bu_remove.enable
+    main.bu_base_close.enable
+    main.bu_collapse1.enable
+    main.bu_expand1.enable
+    main.cb_model1.enable
+    main.vn_y1.enable
+    main.cb_vce1.enable
+    main.vl_x1.enable
+    main.ed_if1.enable
+    main.vl_controls1.enable
+    main.vl_absorb1.enable
+    main.vn_panel1.enable
+    main.vn_time1.enable
+    main.vn_cluster1.enable
+    main.ck_timefe1.enable
+    main.bu_collapse2.enable
+    main.bu_expand2.enable
+    main.cb_model2.enable
+    main.vn_y2.enable
+    main.cb_vce2.enable
+    main.vl_x2.enable
+    main.ed_if2.enable
+    main.vl_controls2.enable
+    main.vl_absorb2.enable
+    main.vn_panel2.enable
+    main.vn_time2.enable
+    main.vn_cluster2.enable
+    main.ck_timefe2.enable
+    main.bu_collapse3.enable
+    main.bu_expand3.enable
+    main.cb_model3.enable
+    main.vn_y3.enable
+    main.cb_vce3.enable
+    main.vl_x3.enable
+    main.ed_if3.enable
+    main.vl_controls3.enable
+    main.vl_absorb3.enable
+    main.vn_panel3.enable
+    main.vn_time3.enable
+    main.vn_cluster3.enable
+    main.ck_timefe3.enable
+    main.bu_collapse4.enable
+    main.bu_expand4.enable
+    main.cb_model4.enable
+    main.vn_y4.enable
+    main.cb_vce4.enable
+    main.vl_x4.enable
+    main.ed_if4.enable
+    main.vl_controls4.enable
+    main.vl_absorb4.enable
+    main.vn_panel4.enable
+    main.vn_time4.enable
+    main.vn_cluster4.enable
+    main.ck_timefe4.enable
+    main.vl_alty.enable
+    main.vl_altx.enable
+    main.vl_addcontrols.enable
+    main.vl_addfe.enable
+    main.ed_lags.enable
+    main.ed_leads.enable
+    main.ed_subsample.enable
+    main.vl_endog.enable
+    main.vl_instruments.enable
+    main.vl_mediators.enable
+    main.vl_moderators.enable
+    main.vn_group.enable
+    main.vl_corr.enable
+    main.ck_vif.enable
+    main.ck_paneltests.enable
+    main.ck_ivtests.enable
+    more.cb_sample.enable
+    more.cb_report.enable
+    more.ed_decimals.enable
+    more.cb_missing.enable
+    more.cb_statistic.enable
+    more.ed_seed.enable
+    more.vn_treat.enable
+    more.vn_post.enable
+    more.ck_ptrend.enable
+    more.cb_ptlevel.enable
+    more.ed_ptbase.enable
+    more.cb_altvce.enable
+    more.vn_altcluster.enable
+    more.ed_psmneighbor.enable
+    more.cb_psm_method.enable
+    more.vn_psm_time.enable
+    more.vl_psm_covars.enable
+    more.vn_heckman_sel.enable
+    more.ck_heckman_fe.enable
+    more.vl_heckman_covars.enable
+    more.cb_gmm_method.enable
+    more.vl_gmm_extra.enable
+    more.ed_gmm_lags.enable
+    more.ck_gmm_twostep.enable
+    more.cb_dml_method.enable
+    more.vl_dml_iv.enable
+    more.vl_dml_controls.enable
+    more.ed_dml_folds.enable
+    more.ed_group_bins.enable
+    more.ck_split_hetero.enable
+    more.ck_group_test.enable
+    more.cb_med_method.enable
+    more.ck_split_med.enable
+    more.ck_mod_plot.enable
+    more.cb_adjust.enable
+    more.ed_winsor_low.enable
+    more.ed_winsor_high.enable
+    more.ed_pstar1.enable
+    more.ed_pstar2.enable
+    more.ed_pstar3.enable
+    more.ed_reps.enable
+    more.ed_prefix.enable
+    more.ed_outdir.enable
+    main.ed_license.enable
+    main.bu_activate.setlabel "已激活"
+    main.bu_activate.disable
+    main.bu_update.enable
 END
 
 SCRIPT empirical_modules_hide
@@ -698,8 +962,9 @@ BEGIN
     main.gb_base.hide
     main.tx_base_tab_note.hide
     main.bu_update.hide
-    main.tx_license.setposition 300 43 45 .
-    main.ed_license.setposition 345 35 145 .
+    main.tx_license.hide
+    main.ed_license.hide
+    main.bu_activate.hide
     main.bu_base_open.hide
     main.tx_base_summary1.hide
     main.tx_base_summary2.hide
@@ -749,8 +1014,11 @@ SCRIPT baseline_panel_collapse
 BEGIN
     main.tx_level.show
     main.cb_level.show
-    main.tx_license.setposition 600 10 45 .
-    main.ed_license.setposition 650 8 160 .
+    main.tx_license.setposition 585 10 45 .
+    main.ed_license.setposition 630 8 145 .
+    main.tx_license.show
+    main.ed_license.show
+    main.bu_activate.show
     main.gb_desc.show
     main.ck_desc.show
     main.tx_descvars.show
@@ -1374,6 +1642,39 @@ BEGIN
     }
 END
 
+PROGRAM license_gate_dispatch
+BEGIN
+    if license_gate_state.iseq(1) {
+        call script license_gate_unlock
+    }
+    else {
+        call script license_gate_lock
+    }
+END
+
+PROGRAM activate_license
+BEGIN
+    if main.ed_license.iseq("") {
+        put "_journalone_require_license"
+        stata hidden immediate
+        if _rc {
+            stopbox stop "尚未检测到有效授权；请输入发布者提供的密钥。"
+        }
+        call script license_gate_unlock
+        stopbox note "已检测到本机有效授权；实证分析功能已解锁。"
+        exit
+    }
+    put "journalone_license, activate(" `""""' main.ed_license `""""' ")"
+    stata hidden immediate
+    if _rc {
+        call script license_gate_lock
+        stopbox stop "授权密钥无效；分析功能仍处于锁定状态。"
+    }
+    call main.ed_license.setvalue ""
+    call script license_gate_unlock
+    stopbox note "授权成功；实证分析功能已解锁。"
+END
+
 PROGRAM oneclick_update
 BEGIN
     put "journalone_update"
@@ -1396,6 +1697,13 @@ BEGIN
             stopbox stop "授权密钥无效；请向插件发布者获取正确密钥。"
         }
         call main.ed_license.setvalue ""
+        call script license_gate_unlock
+    }
+    put "_journalone_require_license"
+    stata hidden immediate
+    if _rc {
+        call script license_gate_lock
+        stopbox stop "JournalOne 尚未激活；请输入有效密钥并点击“激活并解锁”。"
     }
     put "journalone,"
     if main.ck_desc | main.vl_desc.isneq("") {

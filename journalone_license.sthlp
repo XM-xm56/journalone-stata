@@ -27,10 +27,12 @@ real key is checked independently.{p_end}
 {pstd}
 Without a valid activation, the public commands {cmd:journalone},
 {cmd:journalone_prep}, {cmd:journalone_signif}, and the public output helpers
-stop before running an analysis.  The three graphical pages remain available
-so the user can enter the author-supplied key in their masked {bf:密钥} field.
-The page validates the key through a hidden command, clears the field after a
-successful check, and never writes the plaintext key into analysis outputs.{p_end}
+stop before running an analysis.  The three graphical pages remain available,
+but every analysis, variable-selection, and data-processing control is disabled.
+Only the masked {bf:密钥} field, {bf:激活并解锁}, help, and update functions remain
+available.  Loading or changing a dataset never unlocks the interface.  A valid
+key immediately enables the controls; the page clears the field after the check
+and never writes the plaintext key into analysis outputs.{p_end}
 
 {title:Examples}
 

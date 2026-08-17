@@ -1,4 +1,4 @@
-*! version 0.7.0 17aug2026
+*! version 0.8.0 18aug2026
 capture program drop journalone_menu
 program define journalone_menu
     version 16.0
@@ -11,6 +11,7 @@ program define journalone_menu
     local prep_marker_found = 0
     local signif_marker_found = 0
     local update_marker_found = 0
+    local gate_marker_found = 0
     local legacy_label_found = 0
     capture confirm file "`profile_path'"
     if !_rc {
@@ -29,6 +30,9 @@ program define journalone_menu
             }
             if strpos(`"`line'"', "journalone_update_menu_marker") {
                 local update_marker_found = 1
+            }
+            if strpos(`"`line'"', "journalone_license_gate_marker") {
+                local gate_marker_found = 1
             }
             if strpos(`"`line'"', "一键实证") & strpos(`"`line'"', "db journalone") {
                 local legacy_label_found = 1
@@ -120,6 +124,24 @@ program define journalone_menu
         display as text "profile.do 已包含 JournalOne 一键更新菜单，未重复写入"
     }
 
+    if !`gate_marker_found' {
+        capture copy "`profile_path'" "`profile_path'.journalone.licensegate.bak", replace
+        tempname gate_profile_write
+        file open `gate_profile_write' using "`profile_path'", write text append
+        file write `gate_profile_write' _n "* journalone_license_gate_marker" _n
+        file write `gate_profile_write' "capture quietly _journalone_license_read" _n
+        file write `gate_profile_write' "if _rc == 0 {" _n
+        file write `gate_profile_write' "    if r(valid) == 1 global JOURNALONE_LICENSE_VALID 1" _n
+        file write `gate_profile_write' "    else global JOURNALONE_LICENSE_VALID 0" _n
+        file write `gate_profile_write' "}" _n
+        file write `gate_profile_write' "else global JOURNALONE_LICENSE_VALID 0" _n
+        file close `gate_profile_write'
+        display as result "已把授权状态初始化加入 `profile_path'；新会话会自动识别已激活状态"
+    }
+    else {
+        display as text "profile.do 已包含 JournalOne 授权状态初始化，未重复写入"
+    }
+
     if "$JOURNALONE_MENU_LOADED" != "1" & !`marker_found' {
         capture window menu append submenu "stUser" "期刊实证工具"
         capture window menu append item "期刊实证工具" "实证分析" "db journalone"
@@ -142,5 +164,7 @@ program define journalone_menu
         capture window menu refresh
     }
     global JOURNALONE_UPDATE_MENU_LOADED 1
+    capture quietly _journalone_license_read
+    if _rc global JOURNALONE_LICENSE_VALID 0
     display as result "可从 用户 > 期刊实证工具 > 实证分析 / 显著组合 / 数据预处理 / 一键更新 打开"
 end
