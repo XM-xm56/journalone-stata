@@ -1,4 +1,4 @@
-*! version 0.8.0 15aug2026
+*! version 0.9.8 17aug2026
 
 capture program drop journalone_publish_outputs
 program define journalone_publish_outputs, rclass
@@ -468,6 +468,8 @@ program define _journalone_write_desc_rtf
     _journalone_rtf_escape, text(`"`raw_note'"')
     local rtf_note `"`r(escaped)'"'
     file write `rtf_handle' "\pard\ql\f0\fs18\sb0\sa0\sl360\slmult1 `rtf_note'\par" _n
+    _journalone_append_rtf_analysis, handle(`rtf_handle') type(descriptive) ///
+        title(`"`title'"') decimals(`decimals')
     file write `rtf_handle' "}" _n
     file close `rtf_handle'
 end
@@ -554,6 +556,9 @@ program define _journalone_write_reg_rtf
     _journalone_rtf_escape, text(`"`raw_note'"')
     local rtf_note `"`r(escaped)'"'
     file write `rtf_handle' "\pard\ql\f0\fs18\sb0\sa0\sl360\slmult1 `rtf_note'\par" _n
+    _journalone_append_rtf_analysis, handle(`rtf_handle') type(regression) ///
+        title(`"`title'"') decimals(`decimals') pstar1(`pstar1') ///
+        pstar2(`pstar2') pstar3(`pstar3')
     file write `rtf_handle' "}" _n
     file close `rtf_handle'
 end

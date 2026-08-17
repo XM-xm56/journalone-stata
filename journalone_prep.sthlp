@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.3.0 16aug2026}{...}
+{* *! version 0.9.5 17aug2026}{...}
 {vieweralsosee "JournalOne authorization" "help journalone_license"}{...}
 {vieweralsosee "JournalOne estimation" "help journalone"}{...}
 {vieweralsosee "misstable" "help misstable"}{...}
@@ -54,7 +54,7 @@
 {p 8 12 2}6. report, winsorize, or trim outliers;{p_end}
 {p 8 12 2}7. generate transformations and type conversions;{p_end}
 {p 8 12 2}8. apply up to three deletion rows and the free deletion condition;{p_end}
-{p 8 12 2}9. inventory and save the cleaned copy and all audit artifacts, then restore the original data.{p_end}
+{p 8 12 2}9. declare the cleaned panel copy when valid, inventory and save it with all audit artifacts, then restore the original data.{p_end}
 
 {title:Step 2 — variable inventory}
 
@@ -65,7 +65,7 @@
 
 {phang}{opt idvar()} identifies the panel subject, such as firm, person, or city.{p_end}
 {phang}{opt timevar()} identifies a numeric time variable.{p_end}
-{pstd}When both are supplied, the audit reports surplus ID-by-time records. It also reports the number of panel units, the number of observed time values, and the minimum and maximum number of records per unit. The command does not silently call {cmd:xtset}.{p_end}
+{pstd}When both are supplied, the audit reports surplus ID-by-time records. It also reports the number of panel units, the number of observed time values, and the minimum and maximum number of records per unit. After all requested cleaning steps, the output copy is declared with {cmd:xtset idvar timevar} when the variables are valid and the cleaned ID-by-time key is unique. With only {opt idvar()}, the command attempts {cmd:xtset idvar}. The audit and sample-flow files record whether declaration succeeded and its return code. A failed declaration produces a warning but never changes the original in-memory data.{p_end}
 
 {title:Step 4 — freeze the research sample}
 
@@ -136,6 +136,7 @@
 {phang}{opt outdir()} sets the output directory; the default is {cmd:journalone_prep_output}.{p_end}
 {phang}{opt prefix()} sets the run-name prefix; the default is {cmd:prep}.{p_end}
 {phang}{opt saveclean} writes the cleaned data copy. Audit artifacts are written whether or not this option is supplied.{p_end}
+{pstd}If a valid {opt idvar()} (and optional {opt timevar()}) was supplied, the saved {cmd:_clean.dta} retains the corresponding {cmd:xtset} metadata. String IDs, missing panel keys, or repeated ID-by-time observations prevent declaration and are reported through {cmd:panel_set_rc} instead of being silently repaired.{p_end}
 
 {pstd}Every run receives a timestamped ID and writes:{p_end}
 {p 8 12 2}1. full text execution log ({cmd:.log});{p_end}

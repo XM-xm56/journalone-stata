@@ -1,4 +1,4 @@
-*! version 0.6.0 16aug2026
+*! version 0.7.0 17aug2026
 capture program drop journalone_menu
 program define journalone_menu
     version 16.0
@@ -48,6 +48,7 @@ program define journalone_menu
         file write `profile_write' `"    capture window menu append item "期刊实证工具" "实证分析" "db journalone""' _n
         file write `profile_write' `"    capture window menu append item "期刊实证工具" "使用帮助" "help journalone""' _n
         file write `profile_write' "    capture window menu refresh" _n
+        file write `profile_write' "    global JOURNALONE_MENU_LOADED 1" _n
         file write `profile_write' "}" _n
         file close `profile_write'
         display as result "已把“期刊实证工具”菜单安全追加到 `profile_path'"
@@ -76,6 +77,7 @@ program define journalone_menu
         file write `prep_profile_write' "if _caller() >= 8 {" _n
         file write `prep_profile_write' `"    capture window menu append item "期刊实证工具" "数据预处理" "db journalone_prep""' _n
         file write `prep_profile_write' "    capture window menu refresh" _n
+        file write `prep_profile_write' "    global JOURNALONE_PREP_MENU_LOADED 1" _n
         file write `prep_profile_write' "}" _n
         file close `prep_profile_write'
         display as result "已把“数据预处理”菜单安全追加到 `profile_path'"
@@ -92,6 +94,7 @@ program define journalone_menu
         file write `signif_profile_write' "if _caller() >= 8 {" _n
         file write `signif_profile_write' `"    capture window menu append item "期刊实证工具" "显著组合" "db journalone_signif""' _n
         file write `signif_profile_write' "    capture window menu refresh" _n
+        file write `signif_profile_write' "    global JOURNALONE_SIGNIF_MENU_LOADED 1" _n
         file write `signif_profile_write' "}" _n
         file close `signif_profile_write'
         display as result "已把“显著组合”菜单安全追加到 `profile_path'"
@@ -108,6 +111,7 @@ program define journalone_menu
         file write `update_profile_write' "if _caller() >= 8 {" _n
         file write `update_profile_write' `"    capture window menu append item "期刊实证工具" "一键更新" "journalone_update""' _n
         file write `update_profile_write' "    capture window menu refresh" _n
+        file write `update_profile_write' "    global JOURNALONE_UPDATE_MENU_LOADED 1" _n
         file write `update_profile_write' "}" _n
         file close `update_profile_write'
         display as result "已把“一键更新”追加到 `profile_path'"

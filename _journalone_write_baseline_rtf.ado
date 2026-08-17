@@ -1,4 +1,4 @@
-*! version 0.8.0 15aug2026
+*! version 0.9.8 17aug2026
 
 capture program drop _journalone_write_baseline_rtf
 program define _journalone_write_baseline_rtf
@@ -158,6 +158,9 @@ program define _journalone_write_baseline_rtf
     local star_note "* p < `pstar3', ** p < `pstar2', *** p < `pstar1'"
     _journalone_rtf_escape, text(`"`star_note'"')
     file write `rtf_handle' "\pard\ql\f0\fs18\sb0\sa0\sl360\slmult1 `r(escaped)'\par" _n
+    _journalone_append_rtf_analysis, handle(`rtf_handle') type(baseline) ///
+        title(`"`title'"') decimals(`decimals') pstar1(`pstar1') ///
+        pstar2(`pstar2') pstar3(`pstar3')
     file write `rtf_handle' "}" _n
     file close `rtf_handle'
 end

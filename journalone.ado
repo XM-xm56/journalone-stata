@@ -1,4 +1,4 @@
-*! version 0.9.4 16aug2026
+*! version 0.9.12 17aug2026
 capture program drop journalone
 program define journalone, eclass
     version 16.0
@@ -31,6 +31,7 @@ program define journalone, eclass
           TREAT(string) POST(string) ENDOG(string asis)         ///
           INSTRUMENTS(string asis)                              ///
           DESCVARS(varlist numeric) NODESC                      ///
+          CORRVARS(varlist numeric) VIFCHECK PANELTESTS IVTESTS ///
           ALTY(string asis) ALTX(string asis)                   ///
           ADDCONTROLS(string asis) ADDFE(string asis)           ///
           LAGS(numlist integer >=0) LEADS(numlist integer >=0)  ///
@@ -58,8 +59,15 @@ program define journalone, eclass
 
     local has_base = (strtrim("`depvar'") != "")
     local descriptive_requested = ("`nodesc'" == "")
-    if !`has_base' & (!`descriptive_requested' | strtrim(`"`descvars'"') == "") {
-        display as error "未选择可运行模块：仅运行描述性统计时请填写 descvars()；运行回归时请填写 depvar()"
+    local diagnostics_requested = (strtrim(`"`corrvars'"') != "" | ///
+        "`vifcheck'" != "" | "`paneltests'" != "" | "`ivtests'" != "")
+    local standalone_desc = (`descriptive_requested' & strtrim(`"`descvars'"') != "")
+    if !`has_base' & !`standalone_desc' & strtrim(`"`corrvars'"') == "" {
+        display as error "未选择可运行模块：请填写描述性统计变量、相关性变量或基准回归被解释变量"
+        exit 198
+    }
+    if !`has_base' & ("`vifcheck'" != "" | "`paneltests'" != "" | "`ivtests'" != "") {
+        display as error "VIF、面板模型检验和IV诊断必须以第1组基准回归设定为基础"
         exit 198
     }
 
@@ -84,6 +92,14 @@ program define journalone, eclass
     }
     if `has_base' & "`model'" == "iv" & (strtrim(`"`endog'"') == "" | strtrim(`"`instruments'"') == "") {
         display as error "IV 必须填写 endog() 和 instruments()"
+        exit 198
+    }
+    if `has_base' & "`paneltests'" != "" & ("`panel'" == "" | "`time'" == "") {
+        display as error "面板模型选择检验必须填写第1组 panel() 和 time()"
+        exit 198
+    }
+    if `has_base' & "`ivtests'" != "" & (strtrim(`"`endog'"') == "" | strtrim(`"`instruments'"') == "") {
+        display as error "IV第一阶段诊断必须填写 endog() 和 instruments()"
         exit 198
     }
 
@@ -294,6 +310,16 @@ program define journalone, eclass
     if "`outdir'" == "" local outdir "实证分析结果"
     if "`prefix'" == "" local prefix "journalone"
     capture mkdir `"`outdir'"'
+
+    * Remove the four legacy root-level artifacts previously written by this
+    * same prefix.  Fixed module folders below remain untouched.
+    foreach legacy_pattern in "`prefix'_*.log" "`prefix'_*_audit.txt" ///
+        "`prefix'_*_descriptive.csv" "`prefix'_*_descriptive.dta" {
+        local legacy_files : dir `"`outdir'"' files "`legacy_pattern'"
+        foreach legacy_file of local legacy_files {
+            capture erase `"`outdir'/`legacy_file'"'
+        }
+    }
     capture confirm file `"`outdir'/__journalone_write_test.tmp"'
 
     local rundate = subinstr("`c(current_date)'", " ", "", .)
@@ -302,12 +328,13 @@ program define journalone, eclass
     local runid "`prefix'_`rundate'_`runtime'"
     local resultbase `"`outdir'/`runid'"'
     * Fixed per-module publication folders live directly under outdir().
-    * The run ID remains available for logs, audits, and raw reproducibility files.
+    * Run-specific working files are temporary and are not exposed beside them.
     local package_dir `"`outdir'"'
 
     set seed `seed'
     capture log close journalone_log
-    log using `"`resultbase'.log"', text replace name(journalone_log)
+    tempfile journalone_run_log
+    log using `"`journalone_run_log'"', text replace name(journalone_log)
     noisily display as text "期刊实证分析 | run_id=`runid'"
     if `has_base' noisily display as text "模型=`model'  被解释变量=`depvar'"
     else noisily display as text "模块=仅描述性统计"
@@ -321,39 +348,106 @@ program define journalone, eclass
     local raw_n = c(N)
 
     if !`has_base' {
-        capture noisily journalone_descriptive_only,                       ///
-            resultbase(`"`resultbase'"') runid("`runid'")               ///
-            descvars(`descvars') ifcond(`"`ifcond'"') rawn(`raw_n')      ///
-            sigbefore("`sig_before'") missingmode("`missingmode'")       ///
-            reportmode("`reportmode'") decimals(`decimals')              ///
-            statistic("`statistic'") pstar1(`pstar1') pstar2(`pstar2')   ///
-            pstar3(`pstar3') packagedir(`"`package_dir'"')                ///
-            sourcecommand(`"`source_command'"') datafile(`"`source_datafile'"')
-        local descriptive_only_rc = _rc
-        if `descriptive_only_rc' {
-            capture log close journalone_log
-            exit `descriptive_only_rc'
+        local standalone_status "PASS"
+        local standalone_modules ""
+        local standalone_descriptive ""
+        local standalone_descriptive_dta ""
+        local standalone_report ""
+        local standalone_package `"`package_dir'"'
+        local standalone_package_dirs ""
+        local standalone_descriptive_dir ""
+        local standalone_rtf_files ""
+        local standalone_do_files ""
+        local standalone_csv_files ""
+        local standalone_descriptive_rtf ""
+        local standalone_descriptive_do ""
+        local standalone_pack_csv ""
+        local standalone_diagnostics_dir ""
+        local standalone_diagnostics_rtf ""
+        local standalone_diagnostics_do ""
+        local standalone_diagnostics_csv ""
+        local standalone_diagnostics_dta ""
+        local standalone_count = 0
+        local standalone_warnings = 0
+
+        if `standalone_desc' {
+            capture noisily journalone_descriptive_only,                   ///
+                resultbase(`"`resultbase'"') runid("`runid'")           ///
+                descvars(`descvars') ifcond(`"`ifcond'"') rawn(`raw_n')  ///
+                sigbefore("`sig_before'") missingmode("`missingmode'")   ///
+                reportmode("`reportmode'") decimals(`decimals')          ///
+                statistic("`statistic'") pstar1(`pstar1') pstar2(`pstar2') ///
+                pstar3(`pstar3') packagedir(`"`package_dir'"')            ///
+                sourcecommand(`"`source_command'"') datafile(`"`source_datafile'"')
+            local descriptive_only_rc = _rc
+            if `descriptive_only_rc' {
+                capture log close journalone_log
+                exit `descriptive_only_rc'
+            }
+            local standalone_status "`r(status)'"
+            local standalone_modules "descriptive"
+            local standalone_descriptive `"`r(descriptive_file)'"'
+            local standalone_descriptive_dta `"`r(descriptive_dta)'"'
+            local standalone_report `"`r(report_file)'"'
+            local standalone_package `"`r(package_dir)'"'
+            local standalone_package_dirs `"`r(package_dirs)'"'
+            local standalone_descriptive_dir `"`r(descriptive_dir)'"'
+            local standalone_rtf_files `"`r(rtf_files)'"'
+            local standalone_do_files `"`r(do_files)'"'
+            local standalone_csv_files `"`r(csv_files)'"'
+            local standalone_descriptive_rtf `"`r(descriptive_rtf)'"'
+            local standalone_descriptive_do `"`r(descriptive_do)'"'
+            local standalone_pack_csv `"`r(descriptive_package_csv)'"'
+            local standalone_count = r(descriptive_count)
+            local standalone_warnings = r(warnings)
         }
-        local standalone_status "`r(status)'"
-        local standalone_descriptive `"`r(descriptive_file)'"'
-        local standalone_descriptive_dta `"`r(descriptive_dta)'"'
-        local standalone_report `"`r(report_file)'"'
-        local standalone_package `"`r(package_dir)'"'
-        local standalone_package_dirs `"`r(package_dirs)'"'
-        local standalone_descriptive_dir `"`r(descriptive_dir)'"'
-        local standalone_rtf_files `"`r(rtf_files)'"'
-        local standalone_do_files `"`r(do_files)'"'
-        local standalone_csv_files `"`r(csv_files)'"'
-        local standalone_descriptive_rtf `"`r(descriptive_rtf)'"'
-        local standalone_descriptive_do `"`r(descriptive_do)'"'
-        local standalone_pack_csv `"`r(descriptive_package_csv)'"'
-        local standalone_count = r(descriptive_count)
-        local standalone_warnings = r(warnings)
+
+        if strtrim(`"`corrvars'"') != "" {
+            capture noisily journalone_diagnostics,                        ///
+                resultbase(`"`resultbase'"') runid("`runid'")           ///
+                packagedir(`"`package_dir'"') datafile(`"`source_datafile'"') ///
+                corrvars(`corrvars') ifcond(`"`ifcond'"')                 ///
+                decimals(`decimals') pstar1(`pstar1') pstar2(`pstar2')    ///
+                pstar3(`pstar3')
+            local diagnostics_only_rc = _rc
+            if `diagnostics_only_rc' {
+                capture log close journalone_log
+                exit `diagnostics_only_rc'
+            }
+            local standalone_modules = strtrim(`"`standalone_modules' diagnostics"')
+            local standalone_diagnostics_dir `"`r(diagnostics_dir)'"'
+            local standalone_diagnostics_rtf `"`r(diagnostics_rtf)'"'
+            local standalone_diagnostics_do `"`r(diagnostics_do)'"'
+            local standalone_diagnostics_csv `"`r(diagnostics_csv)'"'
+            local standalone_diagnostics_dta `"`r(diagnostics_dta)'"'
+            local standalone_package_dirs = strtrim(`"`standalone_package_dirs' `standalone_diagnostics_dir'"')
+            local standalone_rtf_files = strtrim(`"`standalone_rtf_files' `standalone_diagnostics_rtf'"')
+            local standalone_do_files = strtrim(`"`standalone_do_files' `standalone_diagnostics_do'"')
+            local standalone_csv_files = strtrim(`"`standalone_csv_files' `standalone_diagnostics_csv'"')
+            local standalone_warnings = `standalone_warnings' + r(warnings)
+        }
+
+        local standalone_status "PASS"
+        if `standalone_warnings' > 0 local standalone_status "PASS_WITH_WARNINGS"
+        local standalone_sig_after ""
+        capture quietly datasignature
+        if !_rc local standalone_sig_after "`r(datasignature)'"
+        noisily display as result "正式结果文件（点击文件名打开）："
+        if strtrim(`"`standalone_descriptive_rtf'"') != "" {
+            noisily display in smcl `"  {stata journalone_open using "`standalone_descriptive_rtf'":描述性统计分析.rtf}"'
+            noisily display in smcl `"  {stata journalone_open using "`standalone_descriptive_do'":描述性统计分析.do}"'
+            noisily display in smcl `"  {stata journalone_open using "`standalone_pack_csv'":描述性统计分析.csv}"'
+        }
+        if strtrim(`"`standalone_diagnostics_rtf'"') != "" {
+            noisily display in smcl `"  {stata journalone_open using "`standalone_diagnostics_rtf'":相关性与模型诊断.rtf}"'
+            noisily display in smcl `"  {stata journalone_open using "`standalone_diagnostics_do'":相关性与模型诊断.do}"'
+            noisily display in smcl `"  {stata journalone_open using "`standalone_diagnostics_csv'":相关性与模型诊断.csv}"'
+        }
         capture log close journalone_log
         ereturn clear
         ereturn local journalone_runid "`runid'"
         ereturn local journalone_status "`standalone_status'"
-        ereturn local journalone_modules "descriptive"
+        ereturn local journalone_modules "`standalone_modules'"
         ereturn local journalone_results ""
         ereturn local journalone_results_dta ""
         ereturn local journalone_descriptive `"`standalone_descriptive'"'
@@ -368,6 +462,11 @@ program define journalone, eclass
         ereturn local journalone_descriptive_rtf `"`standalone_descriptive_rtf'"'
         ereturn local journalone_descriptive_do `"`standalone_descriptive_do'"'
         ereturn local journalone_descriptive_csv `"`standalone_pack_csv'"'
+        ereturn local journalone_diagnostics_dir `"`standalone_diagnostics_dir'"'
+        ereturn local journalone_diagnostics_rtf `"`standalone_diagnostics_rtf'"'
+        ereturn local journalone_diagnostics_do `"`standalone_diagnostics_do'"'
+        ereturn local journalone_diagnostics_csv `"`standalone_diagnostics_csv'"'
+        ereturn local journalone_diagnostics_dta `"`standalone_diagnostics_dta'"'
         ereturn local journalone_parallel_test ""
         ereturn local journalone_group_test ""
         ereturn local journalone_moderation_files ""
@@ -408,6 +507,12 @@ program define journalone, eclass
     local rtf_files ""
     local do_files ""
     local module_csv_files ""
+    local diagnostics_dir ""
+    local diagnostics_rtf ""
+    local diagnostics_do ""
+    local diagnostics_csv ""
+    local diagnostics_dta ""
+    local diagnostics_sections = 0
     foreach module_stub in descriptive baseline robustness endogeneity mechanism heterogeneity {
         local `module_stub'_dir ""
         local `module_stub'_rtf ""
@@ -424,6 +529,7 @@ program define journalone, eclass
     }
     if strtrim(`"`mediators' `moderators'"') != "" local modules_run "`modules_run' mechanism"
     if "`group'" != "" | `groupbins' > 0 | "`grouptest'" != "" local modules_run "`modules_run' heterogeneity"
+    if `diagnostics_requested' local modules_run "`modules_run' diagnostics"
     local modules_run = strtrim(`"`modules_run'"')
 
     _journalone_run_spec, handle(`result_post') runid("`runid'")      ///
@@ -578,10 +684,17 @@ program define journalone, eclass
             sort variable_order
             save `"`resultbase'_descriptive.dta"', replace
             export delimited using `"`resultbase'_descriptive.csv"', replace
+            clonevar N = N_nonmissing
+            clonevar Missing = N_missing
+            format variable %-24s
+            format N Missing %12.0fc
+            format mean sd min max %14.`decimals'f
+            local original_linesize = c(linesize)
+            quietly set linesize 255
             noisily display as text "描述性统计（基准估计样本）"
-            noisily list variable_order variable_role variable N_total N_nonmissing ///
-                N_missing mean sd min max, ///
-                noobs abbreviate(24)
+            noisily list variable N Missing mean sd min max, ///
+                noobs separator(0) abbreviate(24)
+            quietly set linesize `original_linesize'
             restore
             estimates restore journalone_main
             local descriptive_status "PASS"
@@ -855,6 +968,37 @@ program define journalone, eclass
         restore
     }
 
+    if `diagnostics_requested' {
+        local corrvarsopt ""
+        if strtrim(`"`corrvars'"') != "" local corrvarsopt "corrvars(`corrvars')"
+        capture noisily journalone_diagnostics,                          ///
+            resultbase(`"`resultbase'"') runid("`runid'")             ///
+            packagedir(`"`package_dir'"') datafile(`"`source_datafile'"') ///
+            `corrvarsopt' `vifcheck' `paneltests' `ivtests'              ///
+            depvar("`depvar'") indepvars(`"`indepvars'"')              ///
+            controls(`"`controls'"') panel("`panel'") time("`time'") ///
+            absorb(`"`absorb'"') ifcond(`"`ifcond'"')                  ///
+            endog(`"`endog'"') instruments(`"`instruments'"')          ///
+            vcetype("`vcetype'") cluster("`cluster'")                 ///
+            decimals(`decimals') pstar1(`pstar1') pstar2(`pstar2')      ///
+            pstar3(`pstar3') `timefeopt'
+        local diagnostics_rc = _rc
+        if `diagnostics_rc' {
+            noisily display as error "相关性与模型诊断生成失败，返回码 `diagnostics_rc'；其他模块结果仍保留"
+            local ++warnings
+        }
+        else {
+            local diagnostics_dir `"`r(diagnostics_dir)'"'
+            local diagnostics_rtf `"`r(diagnostics_rtf)'"'
+            local diagnostics_do `"`r(diagnostics_do)'"'
+            local diagnostics_csv `"`r(diagnostics_csv)'"'
+            local diagnostics_dta `"`r(diagnostics_dta)'"'
+            local diagnostics_sections = r(successful_sections)
+            local warnings = `warnings' + r(warnings)
+        }
+        estimates restore journalone_main
+    }
+
     local sig_after ""
     preserve
     capture quietly keep `signature_vars'
@@ -952,48 +1096,52 @@ program define journalone, eclass
         local warnings = `warnings' + `package_warnings'
     }
 
-    tempname audit_handle
-    file open `audit_handle' using `"`resultbase'_audit.txt"', write text replace
+    if strtrim(`"`diagnostics_dir'"') != "" {
+        local package_output_dirs = strtrim(`"`package_output_dirs' `diagnostics_dir'"')
+        local rtf_files = strtrim(`"`rtf_files' `diagnostics_rtf'"')
+        local do_files = strtrim(`"`do_files' `diagnostics_do'"')
+        local module_csv_files = strtrim(`"`module_csv_files' `diagnostics_csv'"')
+    }
+
     local overall "PASS"
     if `warnings' > 0 local overall "PASS_WITH_WARNINGS"
-    file write `audit_handle' "status=`overall'" _n
-    file write `audit_handle' "run_id=`runid'" _n
-    file write `audit_handle' "modules=`modules_run'" _n
-    file write `audit_handle' "model=`model'" _n
-    file write `audit_handle' "main_n=`main_n'" _n
-    file write `audit_handle' "main_r2=`main_r2'" _n
-    file write `audit_handle' "raw_n=`raw_n'" _n
-    file write `audit_handle' "models_success=`models_success'" _n
-    file write `audit_handle' "warnings=`warnings'" _n
-    file write `audit_handle' "cluster_count=`cluster_count'" _n
-    file write `audit_handle' "descriptive_status=`descriptive_status'" _n
-    file write `audit_handle' "descriptive_variables=`descriptive_count'" _n
-    file write `audit_handle' "descriptive_sample_n=`descriptive_n'" _n
-    file write `audit_handle' "descriptive_sample_mode=`descsample'" _n
-    file write `audit_handle' "descriptive_file=`descriptive_file'" _n
-    file write `audit_handle' "descriptive_dta=`descriptive_dta'" _n
-    file write `audit_handle' "missing_mode=`missingmode'" _n
-    file write `audit_handle' "report_file=`report_file'" _n
-    file write `audit_handle' "parallel_trend_test=`parallel_test_file'" _n
-    file write `audit_handle' "group_test=`group_test_file'" _n
-    file write `audit_handle' "moderation_files=`moderation_files'" _n
-    file write `audit_handle' "package_dir=`package_output_dir'" _n
-    file write `audit_handle' "package_dirs=`package_output_dirs'" _n
-    file write `audit_handle' "rtf_files=`rtf_files'" _n
-    file write `audit_handle' "do_files=`do_files'" _n
-    file write `audit_handle' "module_csv_files=`module_csv_files'" _n
-    file write `audit_handle' "data_signature_before=`sig_before'" _n
-    file write `audit_handle' "data_signature_after=`sig_after'" _n
-    file write `audit_handle' "causal_validity=NOT_AUTOMATICALLY_ESTABLISHED" _n
-    file close `audit_handle'
+
+    * The official descriptive CSV already lives in its named module folder.
+    * Remove the redundant run-ID CSV/DTA working pair from the output root.
+    if strtrim(`"`descriptive_file'"') != "" capture erase `"`descriptive_file'"'
+    if strtrim(`"`descriptive_dta'"') != "" capture erase `"`descriptive_dta'"'
+    local descriptive_file `"`descriptive_package_csv'"'
+    local descriptive_dta ""
 
     noisily display as result "运行完成：`overall'"
     noisily display as text "结果：`resultbase'_results.csv"
     if "`descriptive_file'" != "" noisily display as text "描述性统计：`descriptive_file'"
     if "`report_file'" != "" noisily display as text "Word报告：`report_file'"
+    if "`diagnostics_dir'" != "" noisily display as text "相关性与模型诊断：`diagnostics_dir'"
     if "`package_output_dirs'" != "" noisily display as result "期刊三件套结果文件夹：`package_output_dirs'"
-    noisily display as text "审计：`resultbase'_audit.txt"
-    noisily display as text "日志：`resultbase'.log"
+    noisily display as result "正式结果文件（点击文件名打开）："
+    foreach module_stub in descriptive baseline robustness endogeneity mechanism heterogeneity {
+        local module_title ""
+        if "`module_stub'" == "descriptive" local module_title "描述性统计分析"
+        if "`module_stub'" == "baseline" local module_title "基准回归分析"
+        if "`module_stub'" == "robustness" local module_title "稳健性检验"
+        if "`module_stub'" == "endogeneity" local module_title "内生性检验"
+        if "`module_stub'" == "mechanism" local module_title "机制检验"
+        if "`module_stub'" == "heterogeneity" local module_title "异质性分析"
+        local module_rtf `"``module_stub'_rtf'"'
+        local module_do `"``module_stub'_do'"'
+        local module_csv `"``module_stub'_package_csv'"'
+        if strtrim(`"`module_rtf'"') != "" {
+            noisily display in smcl `"  {stata journalone_open using "`module_rtf'":`module_title'.rtf}"'
+            noisily display in smcl `"  {stata journalone_open using "`module_do'":`module_title'.do}"'
+            noisily display in smcl `"  {stata journalone_open using "`module_csv'":`module_title'.csv}"'
+        }
+    }
+    if strtrim(`"`diagnostics_rtf'"') != "" {
+        noisily display in smcl `"  {stata journalone_open using "`diagnostics_rtf'":相关性与模型诊断.rtf}"'
+        noisily display in smcl `"  {stata journalone_open using "`diagnostics_do'":相关性与模型诊断.do}"'
+        noisily display in smcl `"  {stata journalone_open using "`diagnostics_csv'":相关性与模型诊断.csv}"'
+    }
     capture log close journalone_log
 
     estimates restore journalone_main
@@ -1023,6 +1171,12 @@ program define journalone, eclass
     ereturn local journalone_parallel_test `"`parallel_test_file'"'
     ereturn local journalone_group_test `"`group_test_file'"'
     ereturn local journalone_moderation_files `"`moderation_files'"'
+    ereturn local journalone_diagnostics_dir `"`diagnostics_dir'"'
+    ereturn local journalone_diagnostics_rtf `"`diagnostics_rtf'"'
+    ereturn local journalone_diagnostics_do `"`diagnostics_do'"'
+    ereturn local journalone_diagnostics_csv `"`diagnostics_csv'"'
+    ereturn local journalone_diagnostics_dta `"`diagnostics_dta'"'
+    ereturn scalar journalone_diagnostics_sections = `diagnostics_sections'
     ereturn scalar journalone_models = `models_success'
     ereturn scalar journalone_warnings = `warnings'
     ereturn scalar journalone_descriptive_variables = `descriptive_count'

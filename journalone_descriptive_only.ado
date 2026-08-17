@@ -1,4 +1,4 @@
-*! version 0.8.0 15aug2026
+*! version 0.9.7 17aug2026
 
 capture program drop journalone_descriptive_only
 program define journalone_descriptive_only, rclass
@@ -52,9 +52,17 @@ program define journalone_descriptive_only, rclass
     sort variable_order
     save `"`descriptive_dta'"', replace
     export delimited using `"`descriptive_file'"', replace
+    clonevar N = N_nonmissing
+    clonevar Missing = N_missing
+    format variable %-24s
+    format N Missing %12.0fc
+    format mean sd min max %14.`decimals'f
+    local original_linesize = c(linesize)
+    quietly set linesize 255
     noisily display as text "描述性统计（独立模块样本）"
-    noisily list variable_order variable_role variable N_total N_nonmissing ///
-        N_missing mean sd min max, noobs abbreviate(24)
+    noisily list variable N Missing mean sd min max, ///
+        noobs separator(0) abbreviate(24)
+    quietly set linesize `original_linesize'
     restore
 
     capture noisily journalone_format_outputs, resultbase(`"`resultbase'"') ///
@@ -112,40 +120,17 @@ program define journalone_descriptive_only, rclass
 
     local overall "PASS"
     if `warnings' > 0 local overall "PASS_WITH_WARNINGS"
-    tempname audit_handle
-    file open `audit_handle' using `"`resultbase'_audit.txt"', write text replace
-    file write `audit_handle' "status=`overall'" _n
-    file write `audit_handle' "run_id=`runid'" _n
-    file write `audit_handle' "modules=descriptive" _n
-    file write `audit_handle' "model=NONE" _n
-    file write `audit_handle' "main_n=." _n
-    file write `audit_handle' "main_r2=." _n
-    file write `audit_handle' "raw_n=`rawn'" _n
-    file write `audit_handle' "models_success=0" _n
-    file write `audit_handle' "warnings=`warnings'" _n
-    file write `audit_handle' "descriptive_status=PASS" _n
-    file write `audit_handle' "descriptive_variables=`descriptive_count'" _n
-    file write `audit_handle' "descriptive_sample_n=`descriptive_n'" _n
-    file write `audit_handle' "descriptive_sample_mode=standalone_full" _n
-    file write `audit_handle' "descriptive_file=`descriptive_file'" _n
-    file write `audit_handle' "descriptive_dta=`descriptive_dta'" _n
-    file write `audit_handle' "missing_mode=`missingmode'" _n
-    file write `audit_handle' "report_file=`report_file'" _n
-    file write `audit_handle' "package_dir=`package_output_dir'" _n
-    file write `audit_handle' "package_dirs=`package_output_dirs'" _n
-    file write `audit_handle' "rtf_files=`rtf_files'" _n
-    file write `audit_handle' "do_files=`do_files'" _n
-    file write `audit_handle' "module_csv_files=`csv_files'" _n
-    file write `audit_handle' "data_signature_before=`sigbefore'" _n
-    file write `audit_handle' "data_signature_after=`sig_after'" _n
-    file write `audit_handle' "causal_validity=NOT_APPLICABLE_DESCRIPTIVE_ONLY" _n
-    file close `audit_handle'
+    * The formatted CSV in the named result folder is the public result.
+    * The run-ID CSV/DTA pair is only an internal publication intermediary.
+    capture erase `"`descriptive_file'"'
+    capture erase `"`descriptive_dta'"'
+    local descriptive_file `"`descriptive_package_csv'"'
+    local descriptive_dta ""
 
     noisily display as result "运行完成：`overall'（仅描述性统计）"
     noisily display as text "描述性统计：`descriptive_file'"
     if "`report_file'" != "" noisily display as text "Word报告：`report_file'"
     if "`package_output_dirs'" != "" noisily display as result "期刊三件套结果文件夹：`package_output_dirs'"
-    noisily display as text "审计：`resultbase'_audit.txt"
 
     return local status "`overall'"
     return local descriptive_file `"`descriptive_file'"'

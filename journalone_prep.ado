@@ -1,4 +1,4 @@
-*! version 0.2.0 15aug2026
+*! version 0.9.5 17aug2026
 capture program drop journalone_prep
 program define journalone_prep, rclass
     version 16.0
@@ -311,6 +311,9 @@ program define journalone_prep, rclass
         local time_periods = r(time_periods)
         local panel_min_t = r(panel_min_t)
         local panel_max_t = r(panel_max_t)
+        local panel_declared = r(panel_declared)
+        local panel_set_rc = r(panel_set_rc)
+        local idtime_clean_dup_surplus = r(idtime_clean_dup_surplus)
         local keep_dropped = r(keep_dropped)
         local duplicate_dropped = r(duplicate_dropped)
         local missing_rows = r(missing_rows)
@@ -408,6 +411,9 @@ program define journalone_prep, rclass
     file write `audit_handle' "time_periods=`time_periods'" _n
     file write `audit_handle' "panel_min_t=`panel_min_t'" _n
     file write `audit_handle' "panel_max_t=`panel_max_t'" _n
+    file write `audit_handle' "panel_declared=`panel_declared'" _n
+    file write `audit_handle' "panel_set_rc=`panel_set_rc'" _n
+    file write `audit_handle' "id_time_duplicate_surplus_clean=`idtime_clean_dup_surplus'" _n
     file write `audit_handle' `"generated_vars=`generated_vars'"' _n
     file write `audit_handle' "warnings=`warnings'" _n
     file write `audit_handle' "data_signature_raw=`sig_before'" _n
@@ -456,6 +462,9 @@ program define journalone_prep, rclass
     return scalar drop_rule3_dropped = `drop_rule3_dropped'
     return scalar dropif_dropped = `dropif_dropped'
     return scalar warnings = `warnings'
+    return scalar panel_declared = `panel_declared'
+    return scalar panel_set_rc = `panel_set_rc'
+    return scalar idtime_clean_dup_surplus = `idtime_clean_dup_surplus'
 end
 
 
@@ -506,6 +515,9 @@ program define _journalone_prep_work, rclass
     local outlier_dropped = 0
     local transform_invalid = 0
     local generated_vars ""
+    local panel_declared = 0
+    local panel_set_rc = .
+    local idtime_clean_dup_surplus = .
 
     unab original_vars : _all
     tempvar original_order
@@ -971,6 +983,32 @@ program define _journalone_prep_work, rclass
 
     quietly sort `original_order'
     drop `original_order'
+
+    * Preserve the declared panel structure in the cleaned copy whenever the
+    * requested ID/time variables form a valid Stata panel.  A declaration
+    * failure is recorded as a warning rather than changing or discarding the
+    * cleaned data; the outer preserve/restore still protects source memory.
+    if "`idvar'" != "" {
+        local panel_command "xtset `idvar'"
+        if "`timevar'" != "" {
+            quietly duplicates report `idvar' `timevar'
+            local idtime_clean_dup_surplus = r(N) - r(unique_value)
+            local panel_command "xtset `idvar' `timevar'"
+        }
+        capture quietly `panel_command'
+        local panel_set_rc = _rc
+        if `panel_set_rc' {
+            local ++warnings
+            post `flow_post' ("panel_declaration") (c(N)) (c(N)) (0) ///
+                (`"`panel_command'; rc=`panel_set_rc'; not declared"')
+        }
+        else {
+            local panel_declared = 1
+            post `flow_post' ("panel_declaration") (c(N)) (c(N)) (1) ///
+                (`"`panel_command'; rc=0"')
+        }
+    }
+
     local clean_n = c(N)
     local clean_k = c(k)
     local clean_signature ""
@@ -1015,6 +1053,9 @@ program define _journalone_prep_work, rclass
     return scalar time_periods = `time_periods'
     return scalar panel_min_t = `panel_min_t'
     return scalar panel_max_t = `panel_max_t'
+    return scalar panel_declared = `panel_declared'
+    return scalar panel_set_rc = `panel_set_rc'
+    return scalar idtime_clean_dup_surplus = `idtime_clean_dup_surplus'
     return scalar keep_dropped = `keep_dropped'
     return scalar duplicate_dropped = `duplicate_dropped'
     return scalar missing_rows = `missing_rows'
