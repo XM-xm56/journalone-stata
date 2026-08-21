@@ -1,4 +1,4 @@
-*! version 0.9.13 18aug2026
+*! version 0.9.17 19aug2026
 capture program drop journalone
 program define journalone, eclass
     version 16.0
@@ -15,7 +15,7 @@ program define journalone, eclass
     syntax [, MODEL(string) DEPVAR(name)                        ///
           INDEPVARS(string asis) CONTROLS(string asis)          ///
           PANEL(string) TIME(string) ABSORB(string asis) TIMEFE ///
-          VCETYPE(string) CLUSTER(string) IFCOND(string asis)  ///
+          VCETYPE(string) CLUSTER(string) IVCLUSTER(string) IFCOND(string asis)  ///
           MODEL2(string) DEPVAR2(name) INDEPVARS2(string asis)  ///
           CONTROLS2(string asis) PANEL2(string) TIME2(string)   ///
           ABSORB2(string asis) TIMEFE2 VCETYPE2(string)         ///
@@ -28,16 +28,26 @@ program define journalone, eclass
           CONTROLS4(string asis) PANEL4(string) TIME4(string)   ///
           ABSORB4(string asis) TIMEFE4 VCETYPE4(string)         ///
           CLUSTER4(string) IFCOND4(string asis)                 ///
+          MODEL5(string) DEPVAR5(name) INDEPVARS5(string asis)  ///
+          CONTROLS5(string asis) PANEL5(string) TIME5(string)   ///
+          ABSORB5(string asis) TIMEFE5 VCETYPE5(string)         ///
+          CLUSTER5(string) IFCOND5(string asis)                 ///
+          MODEL6(string) DEPVAR6(name) INDEPVARS6(string asis)  ///
+          CONTROLS6(string asis) PANEL6(string) TIME6(string)   ///
+          ABSORB6(string asis) TIMEFE6 VCETYPE6(string)         ///
+          CLUSTER6(string) IFCOND6(string asis)                 ///
           TREAT(string) POST(string) ENDOG(string asis)         ///
           INSTRUMENTS(string asis)                              ///
           DESCVARS(varlist numeric) NODESC                      ///
-          CORRVARS(varlist numeric) VIFCHECK PANELTESTS IVTESTS ///
+          CORRVARS(varlist numeric) VIFCHECK PANELTESTS IVTESTS OVBTEST ///
           ALTY(string asis) ALTX(string asis)                   ///
+          CUSTOMSPECS(string)                                   ///
           ADDCONTROLS(string asis) ADDFE(string asis)           ///
           LAGS(numlist integer >=0) LEADS(numlist integer >=0)  ///
           SUBSAMPLE(string asis) ALTVCE(string)                 ///
           ALTCLUSTER(string) MEDIATORS(string asis)             ///
-           MODERATORS(string asis) GROUP(string)                 ///
+           MODERATORS(string asis) MEDCLUSTERS(string asis)       ///
+           MODINTERACTIONS(string asis) GROUP(string)             ///
            OUTDIR(string asis) PREFIX(name) LEVEL(cilevel)       ///
            SEED(integer 20260814) REPLACE                      ///
            DESCSAMPLE(string) REPORTMODE(string)               ///
@@ -46,8 +56,9 @@ program define journalone, eclass
            PTBASE(integer -1) GROUPBINS(integer 0) GROUPTEST   ///
            SPLITHET MEDMETHOD(string) SPLITMED MODPLOT         ///
            PSMMETHOD(string) PSMCOVARS(string asis)             ///
-           PSMTIME(varname) PSMNEIGHBOR(integer 1)             ///
-           HECKMANSEL(name) HECKMANCOVARS(string asis) HECKMANFE ///
+           PSMTIME(varname) PSMWEIGHT(varname) PSMNEIGHBOR(integer 1) ///
+           HECKMANSEL(name) HECKMANCOVARS(string asis)           ///
+           HECKMANIMR(varname) HECKMANOUTCOVARS(string asis) HECKMANFE ///
            GMMMETHOD(string) GMMEXTRA(string asis)             ///
            GMMLAGS(integer 1) GMMTWOSTEP                      ///
            DMLMETHOD(string) DMLINSTRUMENTS(string asis)       ///
@@ -56,6 +67,55 @@ program define journalone, eclass
            WINSORHIGH(real 99) PSTAR1(real .01)                ///
            PSTAR2(real .05) PSTAR3(real .10)                  ///
            REPS(integer 1) ]
+
+    * string asis options may retain the user's surrounding quotes.  Remove
+    * only those transport quotes before composing estimation varlists and if
+    * qualifiers; otherwise Stata sees a literal quote as part of a name.
+    local addcontrols = subinstr(strtrim(`"`addcontrols'"'), char(34), "", .)
+    local addfe = subinstr(strtrim(`"`addfe'"'), char(34), "", .)
+    local ivcluster = subinstr(strtrim(`"`ivcluster'"'), char(34), "", .)
+    local subsample = subinstr(strtrim(`"`subsample'"'), char(34), "", .)
+    local ifcond = subinstr(strtrim(`"`ifcond'"'), char(34), "", .)
+
+    * `string asis' options can retain the transport quotes used in a GUI
+    * command such as mediators("m1 m2").  Strip those quotes before any
+    * foreach loop or estimation command; otherwise the whole list becomes
+    * one malformed variable name and the output no longer matches the UI.
+    local indepvars = subinstr(strtrim(`"`indepvars'"'), char(34), "", .)
+    local controls = subinstr(strtrim(`"`controls'"'), char(34), "", .)
+    local absorb = subinstr(strtrim(`"`absorb'"'), char(34), "", .)
+    local endog = subinstr(strtrim(`"`endog'"'), char(34), "", .)
+    local instruments = subinstr(strtrim(`"`instruments'"'), char(34), "", .)
+    local mediators = subinstr(strtrim(`"`mediators'"'), char(34), "", .)
+    local moderators = subinstr(strtrim(`"`moderators'"'), char(34), "", .)
+    local medclusters = subinstr(strtrim(`"`medclusters'"'), char(34), "", .)
+    local modinteractions = subinstr(strtrim(`"`modinteractions'"'), char(34), "", .)
+    local psmcovars = subinstr(strtrim(`"`psmcovars'"'), char(34), "", .)
+    local heckmancovars = subinstr(strtrim(`"`heckmancovars'"'), char(34), "", .)
+    local heckmanoutcovars = subinstr(strtrim(`"`heckmanoutcovars'"'), char(34), "", .)
+    local gmmextra = subinstr(strtrim(`"`gmmextra'"'), char(34), "", .)
+    local dmlinstruments = subinstr(strtrim(`"`dmlinstruments'"'), char(34), "", .)
+    local dmlcontrols = subinstr(strtrim(`"`dmlcontrols'"'), char(34), "", .)
+    local indepvars2 = subinstr(strtrim(`"`indepvars2'"'), char(34), "", .)
+    local controls2 = subinstr(strtrim(`"`controls2'"'), char(34), "", .)
+    local absorb2 = subinstr(strtrim(`"`absorb2'"'), char(34), "", .)
+    local ifcond2 = subinstr(strtrim(`"`ifcond2'"'), char(34), "", .)
+    local indepvars3 = subinstr(strtrim(`"`indepvars3'"'), char(34), "", .)
+    local controls3 = subinstr(strtrim(`"`controls3'"'), char(34), "", .)
+    local absorb3 = subinstr(strtrim(`"`absorb3'"'), char(34), "", .)
+    local ifcond3 = subinstr(strtrim(`"`ifcond3'"'), char(34), "", .)
+    local indepvars4 = subinstr(strtrim(`"`indepvars4'"'), char(34), "", .)
+    local controls4 = subinstr(strtrim(`"`controls4'"'), char(34), "", .)
+    local absorb4 = subinstr(strtrim(`"`absorb4'"'), char(34), "", .)
+    local ifcond4 = subinstr(strtrim(`"`ifcond4'"'), char(34), "", .)
+    local indepvars5 = subinstr(strtrim(`"`indepvars5'"'), char(34), "", .)
+    local controls5 = subinstr(strtrim(`"`controls5'"'), char(34), "", .)
+    local absorb5 = subinstr(strtrim(`"`absorb5'"'), char(34), "", .)
+    local ifcond5 = subinstr(strtrim(`"`ifcond5'"'), char(34), "", .)
+    local indepvars6 = subinstr(strtrim(`"`indepvars6'"'), char(34), "", .)
+    local controls6 = subinstr(strtrim(`"`controls6'"'), char(34), "", .)
+    local absorb6 = subinstr(strtrim(`"`absorb6'"'), char(34), "", .)
+    local ifcond6 = subinstr(strtrim(`"`ifcond6'"'), char(34), "", .)
 
     local has_base = (strtrim("`depvar'") != "")
     local descriptive_requested = ("`nodesc'" == "")
@@ -102,8 +162,27 @@ program define journalone, eclass
         display as error "IV第一阶段诊断必须填写 endog() 和 instruments()"
         exit 198
     }
+    if strtrim(`"`endog'"') != "" | strtrim(`"`instruments'"') != "" {
+        if strtrim(`"`endog'"') == "" | strtrim(`"`instruments'"') == "" {
+            display as error "内生性检验必须同时填写 endog() 和 instruments()"
+            exit 198
+        }
+    }
+    if "`heckmanimr'" != "" | strtrim(`"`heckmanoutcovars'"') != "" {
+        if "`heckmansel'" == "" {
+            display as error "已有IMR变量或Heckman结果方程附加变量需要同时填写 heckmansel()"
+            exit 198
+        }
+    }
+    if "`heckmanimr'" != "" {
+        capture confirm numeric variable `heckmanimr'
+        if _rc {
+            display as error "heckmanimr() 必须是当前数据中的数值变量"
+            exit 109
+        }
+    }
 
-    if !`has_base' & strtrim("`depvar2' `depvar3' `depvar4'") != "" {
+    if !`has_base' & strtrim("`depvar2' `depvar3' `depvar4' `depvar5' `depvar6'") != "" {
         display as error "多组基准回归必须先填写第1组 depvar()"
         exit 198
     }
@@ -115,8 +194,16 @@ program define journalone, eclass
         display as error "请先填写第3组，再填写第4组基准回归"
         exit 198
     }
+    if "`depvar5'" != "" & "`depvar4'" == "" {
+        display as error "请先填写第4组，再填写第5组基准回归"
+        exit 198
+    }
+    if "`depvar6'" != "" & "`depvar5'" == "" {
+        display as error "请先填写第5组，再填写第6组基准回归"
+        exit 198
+    }
 
-    forvalues baseline_index = 2/4 {
+    forvalues baseline_index = 2/6 {
         local baseline_depvar_name "depvar`baseline_index'"
         local baseline_model_name "model`baseline_index'"
         local baseline_indepvars_name "indepvars`baseline_index'"
@@ -195,6 +282,20 @@ program define journalone, eclass
         if "`altvce'" == "cluster" & "`altcluster'" == "" & "`cluster'" == "" {
             display as error "替代聚类标准误必须填写 altcluster() 或 cluster()"
             exit 198
+        }
+    }
+
+    local customspec_count = 0
+    if strtrim(`"`customspecs'"') != "" {
+        quietly _journalone_parse_customspecs, specs(`"`customspecs'"') max(40)
+        local customspec_count = r(count)
+        forvalues customspec_index = 1/`customspec_count' {
+            local customspec_y_name "depvar`customspec_index'"
+            local customspec_x_name "indepvars`customspec_index'"
+            local customspec_if_name "ifcond`customspec_index'"
+            local customspec_y`customspec_index' `"`r(`customspec_y_name')'"'
+            local customspec_x`customspec_index' `"`r(`customspec_x_name')'"'
+            local customspec_if`customspec_index' `"`r(`customspec_if_name')'"'
         }
     }
 
@@ -311,10 +412,18 @@ program define journalone, eclass
     if "`prefix'" == "" local prefix "journalone"
     capture mkdir `"`outdir'"'
 
-    * Remove the four legacy root-level artifacts previously written by this
-    * same prefix.  Fixed module folders below remain untouched.
+    * outdir() is a publication root: keep only named module folders there.
+    * Remove legacy working artifacts from older JournalOne versions/runs;
+    * fixed module folders and their formal RTF/DO/CSV files remain untouched.
     foreach legacy_pattern in "`prefix'_*.log" "`prefix'_*_audit.txt" ///
-        "`prefix'_*_descriptive.csv" "`prefix'_*_descriptive.dta" {
+        "`prefix'_*_descriptive.csv" "`prefix'_*_descriptive.dta"       ///
+        "`prefix'_*_results.csv" "`prefix'_*_results.dta"               ///
+        "`prefix'_*_main.ster" "`prefix'_*_baseline*.ster"              ///
+        "`prefix'_*_diagnostics.dta"                                     ///
+        "`prefix'_*_mediation.csv" "`prefix'_*_mediation.dta"           ///
+        "`prefix'_*_heterogeneity.csv" "`prefix'_*_heterogeneity.dta"   ///
+        "`prefix'_*_parallel_trend.txt" "`prefix'_*_group_test.txt"     ///
+        "`prefix'_*_moderator_*.png" "`prefix'_*_report.docx" {
         local legacy_files : dir `"`outdir'"' files "`legacy_pattern'"
         foreach legacy_file of local legacy_files {
             capture erase `"`outdir'/`legacy_file'"'
@@ -326,7 +435,10 @@ program define journalone, eclass
     local runtime = subinstr("`c(current_time)'", ":", "", .)
     local runtime = subinstr("`runtime'", ".", "", .)
     local runid "`prefix'_`rundate'_`runtime'"
-    local resultbase `"`outdir'/`runid'"'
+    * All datasets, estimates and optional diagnostics used to assemble the
+    * public tables live in the Stata temporary directory, never in outdir().
+    tempfile journalone_workbase
+    local resultbase `"`journalone_workbase'"'
     * Fixed per-module publication folders live directly under outdir().
     * Run-specific working files are temporary and are not exposed beside them.
     local package_dir `"`outdir'"'
@@ -375,7 +487,7 @@ program define journalone, eclass
                 resultbase(`"`resultbase'"') runid("`runid'")           ///
                 descvars(`descvars') ifcond(`"`ifcond'"') rawn(`raw_n')  ///
                 sigbefore("`sig_before'") missingmode("`missingmode'")   ///
-                reportmode("`reportmode'") decimals(`decimals')          ///
+                reportmode("none") decimals(`decimals')                  ///
                 statistic("`statistic'") pstar1(`pstar1') pstar2(`pstar2') ///
                 pstar3(`pstar3') packagedir(`"`package_dir'"')            ///
                 sourcecommand(`"`source_command'"') datafile(`"`source_datafile'"')
@@ -427,6 +539,12 @@ program define journalone, eclass
             local standalone_warnings = `standalone_warnings' + r(warnings)
         }
 
+        * Standalone modules expose only their formal RTF/DO/CSV package.
+        if strtrim(`"`standalone_report'"') != "" capture erase `"`standalone_report'"'
+        if strtrim(`"`standalone_diagnostics_dta'"') != "" capture erase `"`standalone_diagnostics_dta'"'
+        local standalone_report ""
+        local standalone_diagnostics_dta ""
+
         local standalone_status "PASS"
         if `standalone_warnings' > 0 local standalone_status "PASS_WITH_WARNINGS"
         local standalone_sig_after ""
@@ -448,6 +566,7 @@ program define journalone, eclass
         ereturn local journalone_runid "`runid'"
         ereturn local journalone_status "`standalone_status'"
         ereturn local journalone_modules "`standalone_modules'"
+        ereturn local journalone_published_modules "`standalone_modules'"
         ereturn local journalone_results ""
         ereturn local journalone_results_dta ""
         ereturn local journalone_descriptive `"`standalone_descriptive'"'
@@ -491,6 +610,10 @@ program define journalone, eclass
     if "`timefe3'" != "" local timefeopt3 "timefe"
     local timefeopt4 ""
     if "`timefe4'" != "" local timefeopt4 "timefe"
+    local timefeopt5 ""
+    if "`timefe5'" != "" local timefeopt5 "timefe"
+    local timefeopt6 ""
+    if "`timefe6'" != "" local timefeopt6 "timefe"
     local warnings = 0
     local models_success = 0
     local descriptive_status "SKIPPED"
@@ -519,24 +642,53 @@ program define journalone, eclass
         local `module_stub'_do ""
         local `module_stub'_package_csv ""
     }
+    * A model may be required as an internal comparator or prerequisite for
+    * robustness, endogeneity, mechanism, heterogeneity, or diagnostics.  It
+    * must not therefore acquire ownership of the independent baseline output
+    * folder.  Only publish baseline when no dependent module is the task.
+    local dependent_modules ""
+    if strtrim(`"`alty' `altx' `customspecs' `addcontrols' `addfe' `lags' `leads' `subsample' `altvce'"') != "" | ///
+        "`adjustmethod'" == "winsor" | "`ptrend'" != "" {
+        local dependent_modules "`dependent_modules' robustness"
+    }
+    if "`model'" == "iv" | strtrim(`"`endog' `instruments'"') != "" | ///
+        "`psmmethod'" != "none" | "`psmweight'" != "" | "`heckmansel'" != "" | ///
+        "`gmmmethod'" != "none" | "`dmlmethod'" != "none" | "`ovbtest'" != "" {
+        local dependent_modules "`dependent_modules' endogeneity"
+    }
+    if strtrim(`"`mediators' `moderators'"') != "" local dependent_modules "`dependent_modules' mechanism"
+    if "`group'" != "" | `groupbins' > 0 | "`grouptest'" != "" local dependent_modules "`dependent_modules' heterogeneity"
+    local dependent_modules = strtrim(`"`dependent_modules'"')
+
+    * Keep journalone_modules as the backward-compatible list of computations,
+    * and report the narrower directory ownership list separately below.
     local modules_run "baseline"
     if "`nodesc'" == "" local modules_run "descriptive `modules_run'"
-    if strtrim(`"`alty' `altx' `addcontrols' `addfe' `lags' `leads' `subsample' `altvce'"') != "" | "`adjustmethod'" == "winsor" {
-        local modules_run "`modules_run' robustness"
-    }
-    if "`model'" == "iv" | "`psmmethod'" != "none" | "`heckmansel'" != "" | "`gmmmethod'" != "none" | "`dmlmethod'" != "none" {
-        local modules_run "`modules_run' endogeneity"
-    }
-    if strtrim(`"`mediators' `moderators'"') != "" local modules_run "`modules_run' mechanism"
-    if "`group'" != "" | `groupbins' > 0 | "`grouptest'" != "" local modules_run "`modules_run' heterogeneity"
+    local modules_run "`modules_run' `dependent_modules'"
     if `diagnostics_requested' local modules_run "`modules_run' diagnostics"
-    local modules_run = strtrim(`"`modules_run'"')
+    local modules_run = stritrim(strtrim(`"`modules_run'"'))
+
+    local publication_modules ""
+    if "`nodesc'" == "" local publication_modules "descriptive"
+    * Model 1 explicitly selected as IV is itself a baseline estimator in the
+    * baseline editor, not merely an OLS prerequisite for an extension.
+    local explicit_baseline = (strtrim("`depvar2' `depvar3' `depvar4' `depvar5' `depvar6'") != "" | ///
+        "`model'" == "iv")
+    if (strtrim(`"`dependent_modules'"') == "" & !`diagnostics_requested') | ///
+        `explicit_baseline' {
+        local publication_modules "`publication_modules' baseline"
+    }
+    local publication_modules "`publication_modules' `dependent_modules'"
+    local publication_modules = stritrim(strtrim(`"`publication_modules'"'))
+    local published_modules ""
+    local publisher_modules "`publication_modules'"
+    if strtrim(`"`publisher_modules'"') == "" local publisher_modules "none"
 
     _journalone_run_spec, handle(`result_post') runid("`runid'")      ///
         spec("main") model("`model'") depvar("`depvar'")            ///
         indepvars(`"`indepvars'"') controls(`"`controls'"')          ///
         panel("`panel'") time("`time'") absorb(`"`absorb'"')        ///
-        vcetype("`vcetype'") cluster("`cluster'")                   ///
+        vcetype("`vcetype'") cluster("`cluster'") ivcluster("`ivcluster'") ///
         treat("`treat'") postvar("`post'") endog(`"`endog'"')      ///
         instruments(`"`instruments'"') ifcond(`"`ifcond'"')         ///
         level(`level') `timefeopt'
@@ -549,10 +701,9 @@ program define journalone, eclass
     }
     local ++models_success
     estimates store journalone_main
-    estimates save `"`resultbase'_main.ster"', replace
 
     * Additional baseline columns are independent models; later modules still use model 1.
-    forvalues baseline_index = 2/4 {
+    forvalues baseline_index = 2/6 {
         local baseline_depvar_name "depvar`baseline_index'"
         local baseline_model_name "model`baseline_index'"
         local baseline_indepvars_name "indepvars`baseline_index'"
@@ -583,6 +734,7 @@ program define journalone, eclass
                 controls(`"`baseline_controls'"') panel("`baseline_panel'") ///
                 time("`baseline_time'") absorb(`"`baseline_absorb'"')       ///
                 vcetype("`baseline_vce'") cluster("`baseline_cluster'")    ///
+                ivcluster("`ivcluster'")                                      ///
                 treat("`treat'") postvar("`post'") endog(`"`endog'"')    ///
                 instruments(`"`instruments'"') ifcond(`"`baseline_ifcond'"') ///
                 level(`level') `baseline_timefeopt'
@@ -595,7 +747,6 @@ program define journalone, eclass
             }
             local ++models_success
             estimates store journalone_base`baseline_index'
-            estimates save `"`resultbase'_baseline`baseline_index'.ster"', replace
         }
     }
     estimates restore journalone_main
@@ -686,13 +837,18 @@ program define journalone, eclass
             export delimited using `"`resultbase'_descriptive.csv"', replace
             clonevar N = N_nonmissing
             clonevar Missing = N_missing
-            format variable %-24s
+            rename variable Variable
+            rename mean Mean
+            rename sd SD
+            rename min Min
+            rename max Max
+            format Variable %-24s
             format N Missing %12.0fc
-            format mean sd min max %14.`decimals'f
+            format Mean SD Min Max %14.`decimals'f
             local original_linesize = c(linesize)
             quietly set linesize 255
             noisily display as text "描述性统计（基准估计样本）"
-            noisily list variable N Missing mean sd min max, ///
+            noisily list Variable N Missing Mean SD Min Max, ///
                 noobs separator(0) abbreviate(24)
             quietly set linesize `original_linesize'
             restore
@@ -702,6 +858,39 @@ program define journalone, eclass
             local descriptive_dta `"`resultbase'_descriptive.dta"'
         }
     }
+
+    * Robustness alternatives replace the first (core) explanatory variable
+    * only; any additional explanatory variables remain in the specification.
+    if `customspec_count' > 0 {
+        forvalues customspec_index = 1/`customspec_count' {
+            local customspec_y_name "customspec_y`customspec_index'"
+            local customspec_x_name "customspec_x`customspec_index'"
+            local customspec_if_name "customspec_if`customspec_index'"
+            local customspec_y `"``customspec_y_name''"'
+            local customspec_x `"``customspec_x_name''"'
+            local customspec_if `"``customspec_if_name''"'
+            local customspec_sample `"`ifcond'"'
+            if strtrim(`"`customspec_if'"') != "" {
+                local customspec_sample `"`customspec_if'"'
+                if strtrim(`"`ifcond'"') != "" {
+                    local customspec_sample `"(`ifcond') & (`customspec_if')"'
+                }
+            }
+            _journalone_run_spec, handle(`result_post') runid("`runid'") ///
+                spec("custom_`customspec_index'") model("`model'") ///
+                depvar("`customspec_y'") indepvars(`"`customspec_x'"') ///
+                controls(`"`controls'"') panel("`panel'") time("`time'") ///
+                absorb(`"`absorb'"') vcetype("`vcetype'") cluster("`cluster'") ///
+                treat("`treat'") postvar("`post'") endog(`"`endog'"') ///
+                instruments(`"`instruments'"') ifcond(`"`customspec_sample'"') ///
+                level(`level') `timefeopt'
+            if r(rc) local ++warnings
+            else local ++models_success
+        }
+    }
+
+    local firstx : word 1 of `indepvars'
+    local restx : list indepvars - firstx
 
     foreach y2 of local alty {
         _journalone_run_spec, handle(`result_post') runid("`runid'")  ///
@@ -719,7 +908,7 @@ program define journalone, eclass
     foreach x2 of local altx {
         _journalone_run_spec, handle(`result_post') runid("`runid'")  ///
             spec("alt_x_`x2'") model("`model'") depvar("`depvar'") ///
-            indepvars("`x2'") controls(`"`controls'"')              ///
+            indepvars("`x2' `restx'") controls(`"`controls'"')      ///
             panel("`panel'") time("`time'") absorb(`"`absorb'"')   ///
             vcetype("`vcetype'") cluster("`cluster'")              ///
             treat("`treat'") postvar("`post'") endog(`"`endog'"') ///
@@ -818,7 +1007,12 @@ program define journalone, eclass
         }
     }
 
-    if "`altvce'" != "" & "`altvce'" != "`vcetype'" {
+    local alternative_cluster_changed = 0
+    if strtrim(`"`altcluster'"') != "" & ///
+        strtrim(`"`altcluster'"') != strtrim(`"`cluster'"') {
+        local alternative_cluster_changed = 1
+    }
+    if "`altvce'" != "" & ("`altvce'" != "`vcetype'" | `alternative_cluster_changed') {
         local use_altcluster "`altcluster'"
         if "`use_altcluster'" == "" local use_altcluster "`cluster'"
         _journalone_run_spec, handle(`result_post') runid("`runid'") ///
@@ -833,24 +1027,30 @@ program define journalone, eclass
     }
 
     if strtrim(`"`mediators'"') != "" & "`medmethod'" != "none" {
-        if !inlist("`model'", "ols", "fe", "re") {
-            noisily display as error "中介关联模块仅支持 OLS/FE/RE；当前模型已跳过"
+        if !inlist("`model'", "ols", "hdfe", "fe", "re") {
+            noisily display as error "中介关联模块支持 OLS/HDFE/FE/RE；当前模型已跳过"
             local ++warnings
         }
         else {
             foreach mediator of local mediators {
+                local mediator_cluster `"`cluster'"'
+                if strtrim(`"`medclusters'"') != "" {
+                    quietly _journalone_lookup_map, map("`medclusters'") key("`mediator'")
+                    local mapped_mediator_cluster `"`r(value)'"'
+                    if strtrim(`"`mapped_mediator_cluster'"') != "" local mediator_cluster `"`mapped_mediator_cluster'"'
+                }
                 _journalone_run_spec, handle(`result_post') runid("`runid'") ///
                     spec("med_a_`mediator'") model("`model'") depvar("`mediator'") ///
                     indepvars(`"`indepvars'"') controls(`"`controls'"') panel("`panel'") ///
                     time("`time'") absorb(`"`absorb'"') vcetype("`vcetype'") ///
-                    cluster("`cluster'") ifcond(`"`ifcond'"') level(`level') `timefeopt'
+                    cluster("`mediator_cluster'") ifcond(`"`ifcond'"') level(`level') `timefeopt'
                 if r(rc) local ++warnings
                 else local ++models_success
                 _journalone_run_spec, handle(`result_post') runid("`runid'") ///
                     spec("med_b_`mediator'") model("`model'") depvar("`depvar'") ///
                     indepvars(`"`indepvars'"') controls(`"`controls' `mediator'"') ///
                     panel("`panel'") time("`time'") absorb(`"`absorb'"') ///
-                    vcetype("`vcetype'") cluster("`cluster'") ifcond(`"`ifcond'"') ///
+                    vcetype("`vcetype'") cluster("`mediator_cluster'") ifcond(`"`ifcond'"') ///
                     level(`level') `timefeopt'
                 if r(rc) local ++warnings
                 else local ++models_success
@@ -860,15 +1060,23 @@ program define journalone, eclass
 
     if strtrim(`"`moderators'"') != "" {
         capture confirm variable `firstx'
-        if _rc | !inlist("`model'", "ols", "fe", "re") {
-            noisily display as error "调节模块需要首个解释变量为普通数值变量，且模型为 OLS/FE/RE；已跳过"
+        if _rc | !inlist("`model'", "ols", "hdfe", "fe", "re") {
+            noisily display as error "调节模块需要首个解释变量为普通数值变量，且模型为 OLS/HDFE/FE/RE；已跳过"
             local ++warnings
         }
         else {
             foreach moderator of local moderators {
+                local moderator_indepvars `"c.`firstx'##c.`moderator' `restx'"'
+                if strtrim(`"`modinteractions'"') != "" {
+                    quietly _journalone_lookup_map, map("`modinteractions'") key("`moderator'")
+                    local mapped_moderator_interaction `"`r(value)'"'
+                    if strtrim(`"`mapped_moderator_interaction'"') != "" {
+                        local moderator_indepvars `"`firstx' `mapped_moderator_interaction' `moderator' `restx'"'
+                    }
+                }
                 _journalone_run_spec, handle(`result_post') runid("`runid'") ///
                     spec("moderator_`moderator'") model("`model'") depvar("`depvar'") ///
-                    indepvars("c.`firstx'##c.`moderator' `restx'") controls(`"`controls'"') ///
+                    indepvars(`"`moderator_indepvars'"') controls(`"`controls'"') ///
                     panel("`panel'") time("`time'") absorb(`"`absorb'"') ///
                     vcetype("`vcetype'") cluster("`cluster'") ifcond(`"`ifcond'"') ///
                     level(`level') `timefeopt'
@@ -920,21 +1128,23 @@ program define journalone, eclass
         resultbase(`"`resultbase'"') model("`model'") depvar("`depvar'")    ///
         indepvars(`"`indepvars'"') controls(`"`controls'"')                 ///
         panel("`panel'") time("`time'") absorb(`"`absorb'"')              ///
-        vcetype("`vcetype'") cluster("`cluster'") treat("`treat'")       ///
-        postvar("`post'") endog(`"`endog'"') instruments(`"`instruments'"') ///
+        vcetype("`vcetype'") cluster("`cluster'") ivcluster("`ivcluster'") ///
+        treat("`treat'") postvar("`post'") endog(`"`endog'"') instruments(`"`instruments'"') ///
         ifcond(`"`ifcond'"') level(`level') seed(`seed')                    ///
         psmmethod("`psmmethod'") psmcovars(`"`psmcovars'"')                ///
-        psmtime("`psmtime'") psmneighbor(`psmneighbor')                     ///
+        psmtime("`psmtime'") psmweight("`psmweight'") psmneighbor(`psmneighbor') ///
         heckmansel("`heckmansel'") heckmancovars(`"`heckmancovars'"')     ///
+        heckmanimr("`heckmanimr'") heckmanoutcovars(`"`heckmanoutcovars'"') ///
         `heckmanfe'                                                          ///
         gmmmethod("`gmmmethod'") gmmextra(`"`gmmextra'"')                  ///
         gmmlags(`gmmlags') `gmmtwostep' dmlmethod("`dmlmethod'")           ///
         dmlinstruments(`"`dmlinstruments'"') dmlcontrols(`"`dmlcontrols'"') ///
         dmlfolds(`dmlfolds') `ptrend' ptlevel(`ptlevel') ptbase(`ptbase')   ///
         group("`group'") groupbins(`groupbins') `grouptest' `modplot'      ///
-        moderators(`"`moderators'"') adjustmethod("`adjustmethod'")       ///
+         moderators("`moderators'") medclusters("`medclusters'")      ///
+         modinteractions("`modinteractions'") adjustmethod("`adjustmethod'") ///
         winsorlow(`winsorlow') winsorhigh(`winsorhigh') reps(`reps')       ///
-        `timefeopt'
+        `timefeopt' `ovbtest'
     local extra_rc = _rc
     if `extra_rc' {
         noisily display as error "高级扩展模块调度失败，返回码 `extra_rc'；基准结果仍保留"
@@ -961,10 +1171,29 @@ program define journalone, eclass
     if "`cluster'" != "" {
         preserve
         quietly keep if e(sample)
-        tempvar cluster_tag
-        quietly egen byte `cluster_tag' = tag(`cluster')
-        quietly count if `cluster_tag'
-        local cluster_count = r(N)
+        tempvar cluster_tag cluster_interaction
+        local cluster_count_rc = 0
+        if strpos("`cluster'", "#") {
+            * reghdfe accepts interaction clusters such as group#year, but
+            * egen tag() requires a concrete variable.  Encode it only in
+            * this preserved reporting copy.
+            local cluster_parts = subinstr("`cluster'", "#", " ", .)
+            local cluster_parts = subinstr("`cluster_parts'", "i.", "", .)
+            local cluster_parts = subinstr("`cluster_parts'", "c.", "", .)
+            capture quietly egen long `cluster_interaction' = group(`cluster_parts')
+            local cluster_count_rc = _rc
+            if !`cluster_count_rc' capture quietly egen byte `cluster_tag' = tag(`cluster_interaction')
+            if !`cluster_count_rc' local cluster_count_rc = _rc
+        }
+        else {
+            capture quietly egen byte `cluster_tag' = tag(`cluster')
+            local cluster_count_rc = _rc
+        }
+        if !`cluster_count_rc' {
+            quietly count if `cluster_tag'
+            local cluster_count = r(N)
+        }
+        else local ++warnings
         restore
     }
 
@@ -980,6 +1209,7 @@ program define journalone, eclass
             absorb(`"`absorb'"') ifcond(`"`ifcond'"')                  ///
             endog(`"`endog'"') instruments(`"`instruments'"')          ///
             vcetype("`vcetype'") cluster("`cluster'")                 ///
+            ivcluster("`ivcluster'")                                    ///
             decimals(`decimals') pstar1(`pstar1') pstar2(`pstar2')      ///
             pstar3(`pstar3') `timefeopt'
         local diagnostics_rc = _rc
@@ -1019,8 +1249,28 @@ program define journalone, eclass
     sort specification_order term_order
     save `"`resultbase'_results.dta"', replace
     export delimited using `"`resultbase'_results.csv"', replace
-    noisily list specification outcome term estimate std_error p_value N r2 ///
-        if specification == "main", noobs abbreviate(24)
+    capture noisily _journalone_display_table, title("实证分析结果") ///
+        decimals(`decimals') statistic("`statistic'")                  ///
+        pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3')               ///
+        model("`model'") depvar("`depvar'") indepvars(`"`indepvars'"') ///
+        controls(`"`controls'"') absorb(`"`absorb'"') ///
+        panel("`panel'") time("`time'") `timefe'                       ///
+        controls2(`"`controls2'"') absorb2(`"`absorb2'"')                ///
+        panel2("`panel2'") time2("`time2'") model2("`model2'") `timefe2' ///
+        controls3(`"`controls3'"') absorb3(`"`absorb3'"')                ///
+        panel3("`panel3'") time3("`time3'") model3("`model3'") `timefe3' ///
+        controls4(`"`controls4'"') absorb4(`"`absorb4'"')                ///
+        panel4("`panel4'") time4("`time4'") model4("`model4'") `timefe4' ///
+        controls5(`"`controls5'"') absorb5(`"`absorb5'"')                ///
+        panel5("`panel5'") time5("`time5'") model5("`model5'") `timefe5' ///
+        controls6(`"`controls6'"') absorb6(`"`absorb6'"')                ///
+        panel6("`panel6'") time6("`time6'") model6("`model6'") `timefe6' ///
+        addcontrols(`"`addcontrols'"') addfe(`"`addfe'"') `heckmanfe'      ///
+        treat(`"`treat'"') endog(`"`endog'"') instruments(`"`instruments'"') ///
+        heckmansel(`"`heckmansel'"') heckmancovars(`"`heckmancovars'"')    ///
+        psmweight(`"`psmweight'"') heckmanimr(`"`heckmanimr'"')           ///
+        heckmanoutcovars(`"`heckmanoutcovars'"')
+    if _rc noisily display as error "完整结果表显示失败；正式结果仍将写入模块三件套，返回码 `_rc'"
     restore
 
     capture noisily journalone_format_outputs,                              ///
@@ -1028,10 +1278,10 @@ program define journalone, eclass
         descriptive(`"`descriptive_dta'"') resultbase(`"`resultbase'"')   ///
         decimals(`decimals') statistic("`statistic'")                      ///
         pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3')                 ///
-        reportmode("`reportmode'") `splithet' `splitmed'
+        reportmode("none")
     local format_rc = _rc
     if `format_rc' {
-        noisily display as error "格式化输出失败，返回码 `format_rc'；原始DTA/CSV仍保留"
+        noisily display as error "格式化输出失败，返回码 `format_rc'；工作文件不会保留"
         local ++warnings
     }
     else {
@@ -1040,12 +1290,14 @@ program define journalone, eclass
 
     capture noisily journalone_publish_outputs,                           ///
         packagedir(`"`package_dir'"') runid("`runid'")                 ///
+        publishmodules("`publisher_modules'")                           ///
         sourcecommand(`"`source_command'"') datafile(`"`source_datafile'"') ///
         results(`"`resultbase'_results.dta"')                            ///
         descriptive(`"`descriptive_dta'"') model("`model'")            ///
         depvar("`depvar'") indepvars(`"`indepvars'"') controls(`"`controls'"') ///
         panel("`panel'") time("`time'") absorb(`"`absorb'"')          ///
-        vcetype("`vcetype'") cluster("`cluster'") treat("`treat'")   ///
+        vcetype("`vcetype'") cluster("`cluster'") ivcluster("`ivcluster'") ///
+        treat("`treat'")   ///
         model2("`model2'") depvar2("`depvar2'") indepvars2(`"`indepvars2'"') ///
         controls2(`"`controls2'"') panel2("`panel2'") time2("`time2'") ///
         absorb2(`"`absorb2'"') vcetype2("`vcetype2'") cluster2("`cluster2'") ///
@@ -1056,16 +1308,26 @@ program define journalone, eclass
         depvar4("`depvar4'") indepvars4(`"`indepvars4'"') controls4(`"`controls4'"') ///
         panel4("`panel4'") time4("`time4'") absorb4(`"`absorb4'"') ///
         vcetype4("`vcetype4'") cluster4("`cluster4'") ifcond4(`"`ifcond4'"') ///
+        model5("`model5'") depvar5("`depvar5'") indepvars5(`"`indepvars5'"') ///
+        controls5(`"`controls5'"') panel5("`panel5'") time5("`time5'") ///
+        absorb5(`"`absorb5'"') vcetype5("`vcetype5'") cluster5("`cluster5'") ///
+        ifcond5(`"`ifcond5'"') model6("`model6'") depvar6("`depvar6'") ///
+        indepvars6(`"`indepvars6'"') controls6(`"`controls6'"') panel6("`panel6'") ///
+        time6("`time6'") absorb6(`"`absorb6'"') vcetype6("`vcetype6'") ///
+        cluster6("`cluster6'") ifcond6(`"`ifcond6'"') ///
         postvar("`post'") endog(`"`endog'"') instruments(`"`instruments'"') ///
         ifcond(`"`ifcond'"') descsample("`descsample'")                ///
-        alty(`"`alty'"') altx(`"`altx'"') addcontrols(`"`addcontrols'"') ///
+        alty(`"`alty'"') altx(`"`altx'"') customspecs(`"`customspecs'"') ///
+        addcontrols(`"`addcontrols'"') ///
         addfe(`"`addfe'"') lags("`lags'") leads("`leads'")           ///
         subsample(`"`subsample'"') altvce("`altvce'")                 ///
         altcluster("`altcluster'") mediators(`"`mediators'"')         ///
-        moderators(`"`moderators'"') group("`group'")                 ///
+         moderators("`moderators'") medclusters("`medclusters'")  ///
+         modinteractions("`modinteractions'") group("`group'")     ///
         psmmethod("`psmmethod'") psmcovars(`"`psmcovars'"')           ///
-        psmtime("`psmtime'") psmneighbor(`psmneighbor')                 ///
+        psmtime("`psmtime'") psmweight("`psmweight'") psmneighbor(`psmneighbor') ///
         heckmansel("`heckmansel'") heckmancovars(`"`heckmancovars'"') ///
+        heckmanimr("`heckmanimr'") heckmanoutcovars(`"`heckmanoutcovars'"') ///
         gmmmethod("`gmmmethod'") gmmextra(`"`gmmextra'"')             ///
         gmmlags(`gmmlags') dmlmethod("`dmlmethod'")                    ///
         dmlinstruments(`"`dmlinstruments'"') dmlcontrols(`"`dmlcontrols'"') ///
@@ -1074,14 +1336,16 @@ program define journalone, eclass
         winsorhigh(`winsorhigh') ptbase(`ptbase') groupbins(`groupbins') ///
         level(`level') decimals(`decimals') statistic("`statistic'")   ///
         pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3')              ///
-        `timefeopt' `timefe2' `timefe3' `timefe4' `heckmanfe' `gmmtwostep' `ptrend' `grouptest'
+        `timefeopt' `timefe2' `timefe3' `timefe4' `timefe5' `timefe6' ///
+        `heckmanfe' `gmmtwostep' `ptrend' `grouptest' `ovbtest'
     local package_rc = _rc
     if `package_rc' {
-        noisily display as error "三件套结果包生成失败，返回码 `package_rc'；原始结果仍保留"
+        noisily display as error "三件套结果包生成失败，返回码 `package_rc'；工作文件不会保留"
         local ++warnings
     }
     else {
         local package_warnings = r(warnings)
+        local published_modules `"`r(published_modules)'"'
         local package_output_dir `"`r(package_dir)'"'
         local package_output_dirs `"`r(package_dirs)'"'
         local rtf_files `"`r(rtf_files)'"'
@@ -1097,6 +1361,8 @@ program define journalone, eclass
     }
 
     if strtrim(`"`diagnostics_dir'"') != "" {
+        local published_modules "`published_modules' diagnostics"
+        local published_modules = stritrim(strtrim(`"`published_modules'"'))
         local package_output_dirs = strtrim(`"`package_output_dirs' `diagnostics_dir'"')
         local rtf_files = strtrim(`"`rtf_files' `diagnostics_rtf'"')
         local do_files = strtrim(`"`do_files' `diagnostics_do'"')
@@ -1106,17 +1372,32 @@ program define journalone, eclass
     local overall "PASS"
     if `warnings' > 0 local overall "PASS_WITH_WARNINGS"
 
-    * The official descriptive CSV already lives in its named module folder.
-    * Remove the redundant run-ID CSV/DTA working pair from the output root.
+    * The formal module CSV already lives in its named result folder.  Remove
+    * every run-specific assembly artifact; none of these are public output.
     if strtrim(`"`descriptive_file'"') != "" capture erase `"`descriptive_file'"'
     if strtrim(`"`descriptive_dta'"') != "" capture erase `"`descriptive_dta'"'
+    foreach work_suffix in "_results.csv" "_results.dta"                ///
+        "_descriptive.csv" "_descriptive.dta" "_diagnostics.dta"       ///
+        "_mediation.csv" "_mediation.dta"                              ///
+        "_heterogeneity.csv" "_heterogeneity.dta"                      ///
+        "_parallel_trend.txt" "_group_test.txt" "_report.docx"        ///
+        "_main.ster" "_baseline2.ster" "_baseline3.ster"             ///
+        "_baseline4.ster" "_baseline5.ster" "_baseline6.ster" {
+        capture erase `"`resultbase'`work_suffix'"'
+    }
+    foreach moderation_file of local moderation_files {
+        capture erase `"`moderation_file'"'
+    }
     local descriptive_file `"`descriptive_package_csv'"'
     local descriptive_dta ""
+    local diagnostics_dta ""
+    local report_file ""
+    local parallel_test_file ""
+    local group_test_file ""
+    local moderation_files ""
 
     noisily display as result "运行完成：`overall'"
-    noisily display as text "结果：`resultbase'_results.csv"
     if "`descriptive_file'" != "" noisily display as text "描述性统计：`descriptive_file'"
-    if "`report_file'" != "" noisily display as text "Word报告：`report_file'"
     if "`diagnostics_dir'" != "" noisily display as text "相关性与模型诊断：`diagnostics_dir'"
     if "`package_output_dirs'" != "" noisily display as result "期刊三件套结果文件夹：`package_output_dirs'"
     noisily display as result "正式结果文件（点击文件名打开）："
@@ -1145,15 +1426,16 @@ program define journalone, eclass
     capture log close journalone_log
 
     estimates restore journalone_main
-    forvalues baseline_index = 2/4 {
+    forvalues baseline_index = 2/6 {
         capture estimates drop journalone_base`baseline_index'
     }
     capture estimates drop journalone_main
     ereturn local journalone_runid "`runid'"
     ereturn local journalone_status "`overall'"
     ereturn local journalone_modules "`modules_run'"
-    ereturn local journalone_results `"`resultbase'_results.csv"'
-    ereturn local journalone_results_dta `"`resultbase'_results.dta"'
+    ereturn local journalone_published_modules "`published_modules'"
+    ereturn local journalone_results ""
+    ereturn local journalone_results_dta ""
     ereturn local journalone_descriptive `"`descriptive_file'"'
     ereturn local journalone_descriptive_dta `"`descriptive_dta'"'
     ereturn local journalone_report `"`report_file'"'
@@ -1190,6 +1472,7 @@ program define _journalone_run_spec, rclass
         DEPVAR(string) [ INDEPVARS(string) CONTROLS(string)           ///
         PANEL(string) TIME(string) ABSORB(string) TIMEFE               ///
         VCETYPE(string) CLUSTER(string) TREAT(string) POSTVAR(string)  ///
+        IVCLUSTER(string)                                                ///
         ENDOG(string) INSTRUMENTS(string) IFCOND(string)               ///
         LEVEL(real 95) ]
 
@@ -1199,6 +1482,7 @@ program define _journalone_run_spec, rclass
         indepvars(`"`indepvars'"') controls(`"`controls'"')            ///
         panel("`panel'") time("`time'") absorb(`"`absorb'"')          ///
         vcetype("`vcetype'") cluster("`cluster'")                     ///
+        ivcluster("`ivcluster'")                                         ///
         treat("`treat'") postvar("`postvar'") endog(`"`endog'"')     ///
         instruments(`"`instruments'"') ifcond(`"`ifcond'"') `timefeopt'
     local rc = _rc
@@ -1209,6 +1493,8 @@ program define _journalone_run_spec, rclass
     }
     _journalone_post_current, handle(`handle') runid("`runid'") ///
         spec("`spec'") outcome("`depvar'") level(`level')
+    _journalone_post_iv_diagnostics, handle(`handle') runid("`runid'") ///
+        spec("`spec'") outcome("`depvar'")
     return scalar rc = 0
 end
 
@@ -1219,7 +1505,7 @@ program define _journalone_fit, eclass
     syntax , MODEL(string) DEPVAR(string)                              ///
         [ INDEPVARS(string) CONTROLS(string)                           ///
           PANEL(string) TIME(string) ABSORB(string) TIMEFE             ///
-          VCETYPE(string) CLUSTER(string) TREAT(string)               ///
+          VCETYPE(string) CLUSTER(string) TREAT(string) IVCLUSTER(string) ///
           POSTVAR(string) ENDOG(string) INSTRUMENTS(string)            ///
           IFCOND(string) ]
 
@@ -1291,10 +1577,54 @@ program define _journalone_fit, eclass
             i.`panel' i.`time' `fe_terms' `ifqual' `comma'
     }
     else if "`model'" == "iv" {
-        local comma ""
-        if "`vceopt'" != "" local comma ", `vceopt'"
-        ivregress 2sls `depvar' `indepvars' `controls' `fe_terms' `time_terms' ///
-            (`endog' = `instruments') `ifqual' `comma'
+        * Prefer the paper-style HDFE IV estimator when available; retain
+        * official ivregress as a portable fallback.
+        * Keep the GUI meaning of timefe consistent with the HDFE path:
+        * when the user checks the time-FE box, append time() to the absorbed
+        * dimensions used by ivreghdfe as well.  Previously the IV branch
+        * silently ignored timefe and absorbed only the literal absorb().
+        local iv_absorb = strtrim(`"`absorb'"')
+        if "`timefe'" != "" & "`time'" != "" & ///
+            !strpos(" `iv_absorb' ", " `time' ") {
+            local iv_absorb = strtrim("`iv_absorb' `time'")
+        }
+        local has_absorb = (strtrim(`"`iv_absorb'"') != "")
+        capture which ivreghdfe
+        local has_ivreghdfe = (_rc == 0)
+        local iv_cluster "`ivcluster'"
+        if strtrim("`iv_cluster'") == "" local iv_cluster "`cluster'"
+        local iv_cluster_temp ""
+        if strpos("`iv_cluster'", "#") {
+            tempvar iv_cluster_tempvar
+            local cluster_parts = subinstr("`iv_cluster'", "#", " ", .)
+            local cluster_parts = subinstr("`cluster_parts'", "i.", "", .)
+            local cluster_parts = subinstr("`cluster_parts'", "c.", "", .)
+            quietly egen long `iv_cluster_tempvar' = group(`cluster_parts')
+            local iv_cluster "`iv_cluster_tempvar'"
+            local iv_cluster_temp "`iv_cluster_tempvar'"
+        }
+        local iv_rhs = strtrim(itrim(`"`indepvars' `controls'"'))
+        foreach endogenous_variable of local endog {
+            local iv_rhs : list iv_rhs - endogenous_variable
+        }
+        foreach instrument_variable of local instruments {
+            local iv_rhs : list iv_rhs - instrument_variable
+        }
+        local iv_rhs : list uniq iv_rhs
+        if `has_absorb' & `has_ivreghdfe' {
+            local iv_options "absorb(`iv_absorb')"
+            if "`vcetype'" == "robust" local iv_options "`iv_options' robust"
+            else if "`vcetype'" == "cluster" local iv_options "`iv_options' cluster(`iv_cluster')"
+            ivreghdfe `depvar' `iv_rhs' ///
+                (`endog' = `instruments') `ifqual', `iv_options'
+        }
+        else {
+            local comma ""
+            if "`vceopt'" != "" local comma ", `vceopt'"
+            ivregress 2sls `depvar' `iv_rhs' `fe_terms' `time_terms' ///
+                (`endog' = `instruments') `ifqual' `comma'
+        }
+        if "`iv_cluster_temp'" != "" capture drop `iv_cluster_temp'
     }
 end
 
@@ -1302,7 +1632,8 @@ end
 capture program drop _journalone_post_current
 program define _journalone_post_current
     version 16.0
-    syntax , HANDLE(name) RUNID(string) SPEC(string) OUTCOME(string) [LEVEL(real 95)]
+    syntax , HANDLE(name) RUNID(string) SPEC(string) OUTCOME(string) ///
+        [LEVEL(real 95) EQUATION(string) KEEPMILLS]
 
     tempname bmat vmat
     matrix `bmat' = e(b)
@@ -1321,8 +1652,40 @@ program define _journalone_post_current
     if missing(__jo_r2_a) capture scalar __jo_r2_a = e(r2_a_within)
     scalar __jo_tail = (100-`level')/200
 
+    local requested_equation = strtrim(`"`equation'"')
+    local matched_equation_columns = 0
+    if "`requested_equation'" != "" {
+        local equation_prefix "`requested_equation':"
+        forvalues probe_column = 1/`columns' {
+            local probe_term : word `probe_column' of `terms'
+            if substr("`probe_term'", 1, strlen("`equation_prefix'")) == ///
+                "`equation_prefix'" local ++matched_equation_columns
+            if "`keepmills'" != "" & "`probe_term'" == "/mills:lambda" local ++matched_equation_columns
+        }
+        * Standalone single-equation commands expose unprefixed terms; in
+        * that case all coefficients already belong to the requested equation.
+        if `matched_equation_columns' == 0 local requested_equation ""
+    }
+    local posted_order = 0
     forvalues column = 1/`columns' {
         local term : word `column' of `terms'
+        local post_term "`term'"
+        local include_column = 1
+        if "`requested_equation'" != "" {
+            local include_column = 0
+            local equation_prefix "`requested_equation':"
+            if substr("`term'", 1, strlen("`equation_prefix'")) == ///
+                "`equation_prefix'" {
+                local include_column = 1
+                local post_term = substr("`term'", strlen("`equation_prefix'") + 1, .)
+            }
+            if "`keepmills'" != "" & "`term'" == "/mills:lambda" {
+                local include_column = 1
+                local post_term "lambda"
+            }
+        }
+        if !`include_column' continue
+        local ++posted_order
         scalar __jo_beta = `bmat'[1,`column']
         scalar __jo_se = sqrt(`vmat'[`column',`column'])
         scalar __jo_stat = cond(__jo_se>0, __jo_beta/__jo_se, .)
@@ -1336,7 +1699,7 @@ program define _journalone_post_current
         }
         scalar __jo_low = __jo_beta - __jo_crit*__jo_se
         scalar __jo_high = __jo_beta + __jo_crit*__jo_se
-        post `handle' ("`runid'") ("`spec'") ("`outcome'") (`column') ("`term'") ///
+        post `handle' ("`runid'") ("`spec'") ("`outcome'") (`posted_order') ("`post_term'") ///
             (__jo_beta) (__jo_se) (__jo_p) (__jo_low) (__jo_high) (__jo_n) (__jo_r2) (__jo_r2_a)
     }
 end

@@ -9,7 +9,7 @@ program define journalone_diagnostics, rclass
           PANELTESTS IVTESTS DEPVAR(string) INDEPVARS(string)          ///
           CONTROLS(string) PANEL(string) TIME(string) ABSORB(string)   ///
           TIMEFE IFCOND(string) ENDOG(string) INSTRUMENTS(string)      ///
-          VCETYPE(string) CLUSTER(string) DECIMALS(integer 3)          ///
+          VCETYPE(string) CLUSTER(string) IVCLUSTER(string) DECIMALS(integer 3) ///
           PSTAR1(real .01) PSTAR2(real .05) PSTAR3(real .10) ]
 
     local requested = (strtrim(`"`corrvars'"') != "") +              ///
@@ -277,6 +277,7 @@ program define journalone_diagnostics, rclass
             indepvars(`"`indepvars'"') controls(`"`controls'"')      ///
             panel("`panel'") time("`time'") absorb(`"`absorb'"')  ///
             vcetype("`vcetype'") cluster("`cluster'")              ///
+            ivcluster("`ivcluster'")                                  ///
             endog(`"`endog'"') instruments(`"`instruments'"')      ///
             ifcond(`"`ifcond'"') `timefe'
         local iv_rc = _rc
@@ -387,8 +388,10 @@ program define journalone_diagnostics, rclass
     }
     if "`ivtests'" != "" {
         local iv_vce ""
+        local iv_cluster "`ivcluster'"
+        if strtrim("`iv_cluster'") == "" local iv_cluster "`cluster'"
         if "`vcetype'" == "robust" local iv_vce ", vce(robust)"
-        else if "`vcetype'" == "cluster" local iv_vce ", vce(cluster `cluster')"
+        else if "`vcetype'" == "cluster" local iv_vce ", vce(cluster `iv_cluster')"
         file write `do_handle' `"ivregress 2sls `depvar' `indepvars' `controls' `fe_terms' `time_terms' (`endog' = `instruments') `ifqual'`iv_vce'"' _n
         file write `do_handle' "estat firststage, all forcenonrobust" _n
         file write `do_handle' "capture noisily estat overid" _n

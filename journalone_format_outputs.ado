@@ -113,11 +113,17 @@ program define journalone_format_outputs, rclass
             capture confirm file `"`descriptive'"'
             if !_rc {
                 putdocx paragraph, style(Heading1)
-                putdocx text ("描述性统计")
+                putdocx text ("表 A1：描述性统计")
                 preserve
                 quietly use `"`descriptive'"', clear
                 quietly keep variable N_nonmissing mean_display sd_display min_display max_display
                 putdocx table descriptive_results = data(variable N_nonmissing mean_display sd_display min_display max_display), varnames
+                putdocx table descriptive_results(1,1) = ("Variable")
+                putdocx table descriptive_results(1,2) = ("N")
+                putdocx table descriptive_results(1,3) = ("Mean")
+                putdocx table descriptive_results(1,4) = ("SD")
+                putdocx table descriptive_results(1,5) = ("Min")
+                putdocx table descriptive_results(1,6) = ("Max")
                 restore
             }
         }

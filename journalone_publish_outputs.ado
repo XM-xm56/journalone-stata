@@ -1,4 +1,4 @@
-*! version 0.9.8 17aug2026
+*! version 0.9.17 19aug2026
 
 capture program drop journalone_publish_outputs
 program define journalone_publish_outputs, rclass
@@ -8,7 +8,7 @@ program define journalone_publish_outputs, rclass
         [ RESULTS(string) DESCRIPTIVE(string) DATAFILE(string)           ///
           MODEL(string) DEPVAR(string) INDEPVARS(string) CONTROLS(string) ///
           PANEL(string) TIME(string) ABSORB(string) TIMEFE               ///
-          VCETYPE(string) CLUSTER(string)                                ///
+          VCETYPE(string) CLUSTER(string) IVCLUSTER(string)              ///
           MODEL2(string) DEPVAR2(string) INDEPVARS2(string) CONTROLS2(string) ///
           PANEL2(string) TIME2(string) ABSORB2(string) TIMEFE2           ///
           VCETYPE2(string) CLUSTER2(string) IFCOND2(string)              ///
@@ -18,14 +18,23 @@ program define journalone_publish_outputs, rclass
           MODEL4(string) DEPVAR4(string) INDEPVARS4(string) CONTROLS4(string) ///
           PANEL4(string) TIME4(string) ABSORB4(string) TIMEFE4           ///
           VCETYPE4(string) CLUSTER4(string) IFCOND4(string)              ///
-          TREAT(string) POSTVAR(string) ENDOG(string) INSTRUMENTS(string) ///
+          MODEL5(string) DEPVAR5(string) INDEPVARS5(string) CONTROLS5(string) ///
+          PANEL5(string) TIME5(string) ABSORB5(string) TIMEFE5           ///
+          VCETYPE5(string) CLUSTER5(string) IFCOND5(string)              ///
+          MODEL6(string) DEPVAR6(string) INDEPVARS6(string) CONTROLS6(string) ///
+          PANEL6(string) TIME6(string) ABSORB6(string) TIMEFE6           ///
+          VCETYPE6(string) CLUSTER6(string) IFCOND6(string)              ///
+          TREAT(string) POSTVAR(string) ENDOG(string) INSTRUMENTS(string) OVBTEST ///
           IFCOND(string) DESCSAMPLE(string) ALTY(string) ALTX(string)    ///
+          CUSTOMSPECS(string)                                            ///
           ADDCONTROLS(string) ADDFE(string) LAGS(string) LEADS(string)  ///
           SUBSAMPLE(string) ALTVCE(string) ALTCLUSTER(string)           ///
-          MEDIATORS(string) MODERATORS(string) GROUP(string)            ///
-          PSMMETHOD(string) PSMCOVARS(string) PSMTIME(string)           ///
+          MEDIATORS(string) MEDCLUSTERS(string) MODERATORS(string)      ///
+          MODINTERACTIONS(string) GROUP(string)                         ///
+          PSMMETHOD(string) PSMCOVARS(string) PSMTIME(string) PSMWEIGHT(string) ///
           PSMNEIGHBOR(integer 1) HECKMANSEL(string)                      ///
-          HECKMANCOVARS(string) HECKMANFE GMMMETHOD(string)              ///
+          HECKMANCOVARS(string) HECKMANIMR(string) HECKMANOUTCOVARS(string) ///
+          HECKMANFE GMMMETHOD(string)                                    ///
           GMMEXTRA(string) GMMLAGS(integer 1) GMMTWOSTEP                ///
           DMLMETHOD(string) DMLINSTRUMENTS(string) DMLCONTROLS(string) ///
           DMLFOLDS(integer 5)                                            ///
@@ -33,7 +42,8 @@ program define journalone_publish_outputs, rclass
           ADJUSTMETHOD(string) WINSORLOW(real 1) WINSORHIGH(real 99)    ///
           PTREND PTBASE(integer -1) GROUPBINS(integer 0) GROUPTEST      ///
           LEVEL(real 95) DECIMALS(integer 3) STATISTIC(string)          ///
-          PSTAR1(real .01) PSTAR2(real .05) PSTAR3(real .10) ]
+          PSTAR1(real .01) PSTAR2(real .05) PSTAR3(real .10)              ///
+          PUBLISHMODULES(string) ]
 
     if "`statistic'" == "" local statistic "se"
     local statistic = lower(strtrim("`statistic'"))
@@ -42,10 +52,48 @@ program define journalone_publish_outputs, rclass
 
     local warnings = 0
     local module_count = 0
+    * The publisher is also callable directly by tests and by downstream
+    * wrappers.  Normalize multi-variable options here as well as in the
+    * main command, so every emitted DO file matches the actual specification.
+    local indepvars = subinstr(strtrim(`"`indepvars'"'), char(34), "", .)
+    local controls = subinstr(strtrim(`"`controls'"'), char(34), "", .)
+    local absorb = subinstr(strtrim(`"`absorb'"'), char(34), "", .)
+    local endog = subinstr(strtrim(`"`endog'"'), char(34), "", .)
+    local instruments = subinstr(strtrim(`"`instruments'"'), char(34), "", .)
+    local mediators = subinstr(strtrim(`"`mediators'"'), char(34), "", .)
+    local moderators = subinstr(strtrim(`"`moderators'"'), char(34), "", .)
+    local psmcovars = subinstr(strtrim(`"`psmcovars'"'), char(34), "", .)
+    local heckmancovars = subinstr(strtrim(`"`heckmancovars'"'), char(34), "", .)
+    local heckmanoutcovars = subinstr(strtrim(`"`heckmanoutcovars'"'), char(34), "", .)
+    local gmmextra = subinstr(strtrim(`"`gmmextra'"'), char(34), "", .)
+    local dmlinstruments = subinstr(strtrim(`"`dmlinstruments'"'), char(34), "", .)
+    local dmlcontrols = subinstr(strtrim(`"`dmlcontrols'"'), char(34), "", .)
+    local customspecs = subinstr(strtrim(`"`customspecs'"'), char(34), "", .)
+    local ifcond = subinstr(strtrim(`"`ifcond'"'), char(34), "", .)
+    local publishmodules = lower(subinstr(strtrim(`"`publishmodules'"'), char(34), "", .))
+    if strtrim(`"`publishmodules'"') != "" {
+        local normalized_publishmodules ""
+        foreach requested_module of local publishmodules {
+            if !inlist("`requested_module'", "none", "descriptive", "baseline", ///
+                "robustness", "endogeneity", "mechanism", "heterogeneity") {
+                display as error "publishmodules() 包含未知模块：`requested_module'"
+                exit 198
+            }
+            if !strpos(" `normalized_publishmodules' ", " `requested_module' ") {
+                local normalized_publishmodules "`normalized_publishmodules' `requested_module'"
+            }
+        }
+        local publishmodules = strtrim("`normalized_publishmodules'")
+        if strpos(" `publishmodules' ", " none ") & "`publishmodules'" != "none" {
+            display as error "publishmodules(none) 不能与其他模块同时使用"
+            exit 198
+        }
+    }
     local package_dirs ""
     local rtf_files ""
     local do_files ""
     local csv_files ""
+    local published_modules ""
 
     local descriptive_rtf ""
     local descriptive_do ""
@@ -72,7 +120,9 @@ program define journalone_publish_outputs, rclass
     local heterogeneity_csv ""
     local heterogeneity_dir ""
 
-    if strtrim(`"`descriptive'"') != "" {
+    local publish_descriptive = (strtrim(`"`publishmodules'"') == "" | ///
+        strpos(" `publishmodules' ", " descriptive ") > 0)
+    if strtrim(`"`descriptive'"') != "" & `publish_descriptive' {
         capture confirm file `"`descriptive'"'
         if _rc local ++warnings
         else {
@@ -124,6 +174,7 @@ program define journalone_publish_outputs, rclass
             restore
             if "`descriptive_rtf'" != "" & "`descriptive_do'" != "" & "`descriptive_csv'" != "" {
                 local ++module_count
+                local published_modules "`published_modules' descriptive"
                 local package_dirs `"`package_dirs' `descriptive_dir'"'
                 local rtf_files `"`rtf_files' `descriptive_rtf'"'
                 local do_files `"`do_files' `descriptive_do'"'
@@ -137,6 +188,8 @@ program define journalone_publish_outputs, rclass
         if _rc local ++warnings
         else {
             foreach module_id in baseline robustness endogeneity mechanism heterogeneity {
+                if strtrim(`"`publishmodules'"') != "" &                 ///
+                    !strpos(" `publishmodules' ", " `module_id' ") continue
                 preserve
                 quietly use `"`results'"', clear
                 if "`module_id'" == "baseline" {
@@ -146,14 +199,24 @@ program define journalone_publish_outputs, rclass
                     local module_stub "baseline"
                 }
                 else if "`module_id'" == "robustness" {
-                    quietly keep if substr(specification,1,6) == "alt_y_" |     ///
+                    generate byte __jo_robust_spec =                              ///
+                        substr(specification,1,6) == "alt_y_" |                 ///
                         substr(specification,1,6) == "alt_x_" |                 ///
+                        substr(specification,1,7) == "custom_" |               ///
                         inlist(specification, "additional_controls",             ///
                             "additional_fe", "subsample", "alternative_vce",   ///
                             "parallel_trend") |                                 ///
                         substr(specification,1,4) == "lag_" |                    ///
                         substr(specification,1,5) == "lead_" |                   ///
                         substr(specification,1,7) == "winsor_"
+                    quietly count if __jo_robust_spec
+                    if r(N) > 0 {
+                        * Keep the original main model as a comparator.  It is
+                        * repeated in continuation tables by the RTF writer.
+                        quietly keep if __jo_robust_spec | specification == "main"
+                    }
+                    else quietly keep if 0
+                    drop __jo_robust_spec
                     local module_title "稳健性检验"
                     local module_stub "robustness"
                 }
@@ -161,6 +224,8 @@ program define journalone_publish_outputs, rclass
                     local iv_main ""
                     if "`model'" == "iv" local iv_main `"| specification == "main""'
                     quietly keep if substr(specification,1,4) == "psm_" |       ///
+                        substr(specification,1,3) == "iv_" |                    ///
+                        substr(specification,1,4) == "ovb_" |                   ///
                         substr(specification,1,8) == "heckman_" |                ///
                         substr(specification,1,4) == "gmm_" |                    ///
                         substr(specification,1,4) == "dml_" `iv_main'
@@ -181,7 +246,24 @@ program define journalone_publish_outputs, rclass
 
                 quietly count
                 if r(N) > 0 {
-                    sort specification_order term_order
+                    if "`module_id'" == "endogeneity" {
+                        generate long __jo_endog_priority = 90
+                        replace __jo_endog_priority = 10 if substr(specification,1,4) == "psm_"
+                        replace __jo_endog_priority = 20 if specification == "heckman_selection"
+                        replace __jo_endog_priority = 30 if specification == "heckman_twostep"
+                        replace __jo_endog_priority = 40 if substr(specification,1,9) == "iv_first_"
+                        replace __jo_endog_priority = 50 if specification == "iv_2sls" | specification == "main"
+                        replace __jo_endog_priority = 60 if substr(specification,1,4) == "ovb_"
+                        replace __jo_endog_priority = 70 if substr(specification,1,4) == "gmm_"
+                        replace __jo_endog_priority = 80 if substr(specification,1,4) == "dml_"
+                        sort __jo_endog_priority specification_order term_order
+                        generate long __jo_endog_row = _n
+                        bysort specification: egen long __jo_endog_first = min(__jo_endog_row)
+                        drop specification_order
+                        egen long specification_order = group(__jo_endog_first)
+                        drop __jo_endog_priority __jo_endog_row __jo_endog_first
+                    }
+                    else sort specification_order term_order
                     local do_specs ""
                     forvalues row = 1/`=_N' {
                         local do_specification = specification[`row']
@@ -191,6 +273,14 @@ program define journalone_publish_outputs, rclass
                     }
                     local do_specs = strtrim("`do_specs'")
                     _journalone_add_spec_labels
+                    * When IV is the baseline estimator, main is the actual
+                    * structural second-stage equation rather than an OLS
+                    * comparator.  Label it explicitly in the endogeneity
+                    * package so the table remains self-explanatory.
+                    if "`module_id'" == "endogeneity" & "`model'" == "iv" {
+                        replace specification_label = "IV第二阶段（2SLS）" ///
+                            if specification == "main"
+                    }
                     capture confirm variable r2_a
                     if _rc generate double r2_a = .
                     foreach generated_var in analysis_module t_value             ///
@@ -235,13 +325,62 @@ program define journalone_publish_outputs, rclass
                         capture noisily _journalone_write_baseline_rtf,          ///
                             file(`"`module_rtf'"') title("`module_title'")     ///
                             decimals(`decimals') statistic("`statistic'")      ///
-                            pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3')
+                            pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3') ///
+                            model("`model'") controls(`"`controls'"')       ///
+                            absorb(`"`absorb'"') panel("`panel'")           ///
+                            time("`time'") `timefe'                        ///
+                            controls2(`"`controls2'"') absorb2(`"`absorb2'"') ///
+                            panel2("`panel2'") time2("`time2'")           ///
+                            model2("`model2'") `timefe2'                    ///
+                            controls3(`"`controls3'"') absorb3(`"`absorb3'"') ///
+                            panel3("`panel3'") time3("`time3'")           ///
+                            model3("`model3'") `timefe3'                    ///
+                            controls4(`"`controls4'"') absorb4(`"`absorb4'"') ///
+                            panel4("`panel4'") time4("`time4'")           ///
+                            model4("`model4'") `timefe4'                    ///
+                            controls5(`"`controls5'"') absorb5(`"`absorb5'"') ///
+                            panel5("`panel5'") time5("`time5'")           ///
+                            model5("`model5'") `timefe5'                    ///
+                            controls6(`"`controls6'"') absorb6(`"`absorb6'"') ///
+                            panel6("`panel6'") time6("`time6'")           ///
+                            model6("`model6'") `timefe6'                    ///
+                            addcontrols(`"`addcontrols'"') addfe(`"`addfe'"')
+                    }
+                    else if "`module_id'" == "robustness" {
+                        capture noisily _journalone_write_robustness_rtf,        ///
+                            file(`"`module_rtf'"') title("`module_title'")     ///
+                            decimals(`decimals') statistic("`statistic'")      ///
+                            pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3') ///
+                            model("`model'") controls(`"`controls'"')       ///
+                            absorb(`"`absorb'"') panel("`panel'")           ///
+                            time("`time'") `timefe'                        ///
+                            addcontrols(`"`addcontrols'"') addfe(`"`addfe'"')
+                    }
+                    else if "`module_id'" == "endogeneity" {
+                        * Publication table: compact, paper-style columns with
+                        * focal terms and identification diagnostics.  The
+                        * underlying CSV/DO remain complete and unchanged.
+                        capture noisily _journalone_write_endog_rtf,          ///
+                            file(`"`module_rtf'"') title("`module_title'")  ///
+                            decimals(`decimals') statistic("`statistic'")   ///
+                            pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3') ///
+                            model("`model'") depvar("`depvar'")            ///
+                            indepvars(`"`indepvars'"') controls(`"`controls'"') ///
+                            absorb(`"`absorb'"') panel("`panel'")           ///
+                            time("`time'") `timefe' `heckmanfe'              ///
+                            addcontrols(`"`addcontrols'"') addfe(`"`addfe'"') ///
+                            treat("`treat'") endog(`"`endog'"') instruments(`"`instruments'"') ///
+                            heckmancovars(`"`heckmancovars'"') heckmanimr("`heckmanimr'") ///
+                            heckmanoutcovars(`"`heckmanoutcovars'"')
                     }
                     else {
                         capture noisily _journalone_write_reg_rtf,               ///
                             file(`"`module_rtf'"') title("`module_title'")     ///
                             decimals(`decimals') statistic("`statistic'")      ///
-                            pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3')
+                            pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3') ///
+                            model("`model'") controls(`"`controls'"')       ///
+                            absorb(`"`absorb'"') panel("`panel'")           ///
+                            time("`time'") `timefe' `heckmanfe'
                     }
                     if _rc {
                         local module_rtf ""
@@ -254,6 +393,7 @@ program define journalone_publish_outputs, rclass
                         outputdir(`"`module_dir'"') model("`model'")          ///
                         depvar("`depvar'") indepvars(`"`indepvars'"')         ///
                         controls(`"`controls'"') panel("`panel'") time("`time'") ///
+                        ivcluster("`ivcluster'")                          ///
                         absorb(`"`absorb'"') vcetype("`vcetype'") cluster("`cluster'") ///
                         model2("`model2'") depvar2("`depvar2'") indepvars2(`"`indepvars2'"') ///
                         controls2(`"`controls2'"') panel2("`panel2'") time2("`time2'") ///
@@ -266,17 +406,27 @@ program define journalone_publish_outputs, rclass
                         controls4(`"`controls4'"') panel4("`panel4'") time4("`time4'") ///
                         absorb4(`"`absorb4'"') vcetype4("`vcetype4'") cluster4("`cluster4'") ///
                         ifcond4(`"`ifcond4'"')                            ///
+                        model5("`model5'") depvar5("`depvar5'") indepvars5(`"`indepvars5'"') ///
+                        controls5(`"`controls5'"') panel5("`panel5'") time5("`time5'") ///
+                        absorb5(`"`absorb5'"') vcetype5("`vcetype5'") cluster5("`cluster5'") ///
+                        ifcond5(`"`ifcond5'"') model6("`model6'") depvar6("`depvar6'") ///
+                        indepvars6(`"`indepvars6'"') controls6(`"`controls6'"') ///
+                        panel6("`panel6'") time6("`time6'") absorb6(`"`absorb6'"') ///
+                        vcetype6("`vcetype6'") cluster6("`cluster6'") ifcond6(`"`ifcond6'"') ///
                         treat("`treat'") postvar("`postvar'") endog(`"`endog'"') ///
                         instruments(`"`instruments'"') ifcond(`"`ifcond'"')   ///
                         specs(`"`do_specs'"') alty(`"`alty'"') altx(`"`altx'"') ///
+                        customspecs(`"`customspecs'"')                           ///
                         addcontrols(`"`addcontrols'"') addfe(`"`addfe'"')     ///
                         lags("`lags'") leads("`leads'") subsample(`"`subsample'"') ///
                         altvce("`altvce'") altcluster("`altcluster'")         ///
-                        mediators(`"`mediators'"') moderators(`"`moderators'"') ///
+                        mediators("`mediators'") medclusters("`medclusters'") ///
+                        moderators("`moderators'") modinteractions("`modinteractions'") ///
                         group("`group'") psmmethod("`psmmethod'")            ///
-                        psmcovars(`"`psmcovars'"') psmtime("`psmtime'")      ///
+                        psmcovars(`"`psmcovars'"') psmtime("`psmtime'") psmweight("`psmweight'") ///
                         psmneighbor(`psmneighbor') heckmansel("`heckmansel'") ///
-                        heckmancovars(`"`heckmancovars'"') gmmmethod("`gmmmethod'") ///
+                        heckmancovars(`"`heckmancovars'"') heckmanimr("`heckmanimr'") ///
+                        heckmanoutcovars(`"`heckmanoutcovars'"') gmmmethod("`gmmmethod'") ///
                         gmmextra(`"`gmmextra'"') gmmlags(`gmmlags')           ///
                         dmlmethod("`dmlmethod'") dmlinstruments(`"`dmlinstruments'"') ///
                         dmlcontrols(`"`dmlcontrols'"') dmlfolds(`dmlfolds')   ///
@@ -285,8 +435,8 @@ program define journalone_publish_outputs, rclass
                         ptbase(`ptbase') groupbins(`groupbins')                 ///
                         decimals(`decimals') statistic("`statistic'") level(`level') ///
                         pstar1(`pstar1') pstar2(`pstar2') pstar3(`pstar3')      ///
-                        `timefe' `timefe2' `timefe3' `timefe4' `heckmanfe' ///
-                        `gmmtwostep' `ptrend' `grouptest'
+                        `timefe' `timefe2' `timefe3' `timefe4' `timefe5' `timefe6' `heckmanfe' ///
+                        `gmmtwostep' `ptrend' `grouptest' `ovbtest'
                     if _rc {
                         local module_do ""
                         local ++warnings
@@ -298,6 +448,7 @@ program define journalone_publish_outputs, rclass
                     local `module_stub'_dir `"`module_dir'"'
                     if "`module_rtf'" != "" & "`module_do'" != "" & "`module_csv'" != "" {
                         local ++module_count
+                        local published_modules "`published_modules' `module_id'"
                         local package_dirs `"`package_dirs' `module_dir'"'
                         local rtf_files `"`rtf_files' `module_rtf'"'
                         local do_files `"`do_files' `module_do'"'
@@ -313,11 +464,13 @@ program define journalone_publish_outputs, rclass
     local rtf_files = strtrim(`"`rtf_files'"')
     local do_files = strtrim(`"`do_files'"')
     local csv_files = strtrim(`"`csv_files'"')
+    local published_modules = stritrim(strtrim(`"`published_modules'"'))
     return local package_dir `"`packagedir'"'
     return local package_dirs `"`package_dirs'"'
     return local rtf_files `"`rtf_files'"'
     return local do_files `"`do_files'"'
     return local csv_files `"`csv_files'"'
+    return local published_modules `"`published_modules'"'
     return local descriptive_rtf `"`descriptive_rtf'"'
     return local descriptive_do `"`descriptive_do'"'
     return local descriptive_csv `"`descriptive_csv'"'
@@ -359,6 +512,8 @@ program define _journalone_add_spec_labels
         if substr(specification,1,6) == "alt_y_"
     replace specification_label = "替换核心解释变量：" + substr(specification,7,.) ///
         if substr(specification,1,6) == "alt_x_"
+    replace specification_label = "自定义规格 " + substr(specification,8,.) ///
+        if substr(specification,1,7) == "custom_"
     replace specification_label = "增加控制变量" if specification == "additional_controls"
     replace specification_label = "增加固定效应" if specification == "additional_fe"
     replace specification_label = "替代样本" if specification == "subsample"
@@ -372,7 +527,15 @@ program define _journalone_add_spec_labels
     replace specification_label = "平行趋势检验" if specification == "parallel_trend"
     replace specification_label = "PSM：" + substr(specification,5,.) ///
         if substr(specification,1,4) == "psm_"
-    replace specification_label = "Heckman两步法" if specification == "heckman_twostep"
+    replace specification_label = "PSM加权结果" if specification == "psm_weighted"
+    replace specification_label = "PSM近邻匹配（ATT）" if specification == "psm_nearest"
+    replace specification_label = "IV第一阶段：" + outcome ///
+        if substr(specification,1,9) == "iv_first_"
+    replace specification_label = "IV第二阶段（2SLS）" if specification == "iv_2sls"
+    replace specification_label = "Heckman第一阶段（选择方程）" ///
+        if specification == "heckman_selection"
+    replace specification_label = "Heckman第二阶段（结果方程）" ///
+        if specification == "heckman_twostep"
     replace specification_label = "动态GMM：" + substr(specification,5,.) ///
         if substr(specification,1,4) == "gmm_"
     replace specification_label = "双重机器学习：" + substr(specification,5,.) ///
@@ -386,6 +549,16 @@ program define _journalone_add_spec_labels
     replace specification_label = "异质性分组：" + substr(specification,7,.) ///
         if substr(specification,1,6) == "group_"
     generate str244 term_label = term
+    * Generated diagnostics may be translated; user variable names remain
+    * exactly as Stata returned them in term_label.
+    replace term_label = "遗漏变量偏误F值" if term == "OVB_F"
+    replace term_label = "第一阶段排除工具变量F值" if term == "FIRST_STAGE_F"
+    replace term_label = "Kleibergen–Paap rk LM" if term == "KP_LM"
+    replace term_label = "Cragg–Donald Wald F" if term == "CD_F"
+    replace term_label = "Kleibergen–Paap rk Wald F" if term == "KP_F"
+    replace term_label = "逆米尔斯比率（IMR）" if term == "lambda"
+    replace term_label = "逆米尔斯比率（IMR）" if specification == "heckman_twostep" & ///
+        substr(term,1,2) == "__"
     * Keep every reported variable/term exactly as Stata returned it.
     * In particular, do not translate English names such as _cons into Chinese.
 end
@@ -415,14 +588,19 @@ program define _journalone_write_desc_rtf
     quietly count
     if r(N) == 0 exit 2000
 
-    _journalone_rtf_escape, text(`"`title'"')
+    * Keep the Chinese table/file names; only the statistical headers are English.
+    local output_title `"`title'"'
+    if inlist(strtrim(`"`title'"'), "描述性统计分析", "描述性统计") {
+        local output_title "表 A1：描述性统计"
+    }
+    _journalone_rtf_escape, text(`"`output_title'"')
     local rtf_title `"`r(escaped)'"'
-    local header1 "变量"
+    local header1 "Variable"
     local header2 "N"
-    local header3 "均值"
-    local header4 "标准差"
-    local header5 "最小值"
-    local header6 "最大值"
+    local header3 "Mean"
+    local header4 "SD"
+    local header5 "Min"
+    local header6 "Max"
     forvalues column = 1/6 {
         _journalone_rtf_escape, text(`"`header`column''"')
         local rtf_header`column' `"`r(escaped)'"'
@@ -475,8 +653,10 @@ program define _journalone_write_desc_rtf
 end
 
 
-capture program drop _journalone_write_reg_rtf
-program define _journalone_write_reg_rtf
+* Legacy inline writer retained under a private name for old cached sessions;
+* the package now uses the standalone writer with design-metadata rows.
+capture program drop _journalone_write_reg_rtf_legacy
+program define _journalone_write_reg_rtf_legacy
     version 16.0
     syntax , FILE(string) TITLE(string) [DECIMALS(integer 3) STATISTIC(string) ///
         PSTAR1(real .01) PSTAR2(real .05) PSTAR3(real .10)]

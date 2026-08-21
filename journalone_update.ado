@@ -1,4 +1,4 @@
-*! version 0.9.8 17aug2026 JournalOne one-click updater
+*! version 0.9.14 19aug2026 JournalOne one-click updater
 
 capture program drop journalone_update
 program define journalone_update, rclass
@@ -67,13 +67,21 @@ program define journalone_update, rclass
         journalone_export_descriptive journalone_export_stored ///
         journalone_open _journalone_append_rtf_analysis ///
         _journalone_write_desc_rtf _journalone_write_reg_rtf ///
-        _journalone_write_baseline_rtf _journalone_write_diag_rtf {
+        _journalone_write_baseline_rtf _journalone_write_diag_rtf ///
+        _journalone_write_robustness_rtf _journalone_write_endog_rtf ///
+        _journalone_write_spec_meta_rows ///
+        _journalone_post_iv_diagnostics ///
+        _journalone_lookup_map _journalone_display_results_table ///
+        _journalone_display_table {
         capture program drop `command'
     }
     capture program drop _journalone_license_expected
     capture program drop _journalone_license_allowed
     capture program drop _journalone_license_read
     capture program drop _journalone_require_license
+    capture program drop _journalone_parse_customspecs
+    capture program drop _jo_display_results_table
+    capture program drop _jo_display_endog_table
     capture quietly journalone_menu
 
     display as result "JournalOne 一键更新完成。"

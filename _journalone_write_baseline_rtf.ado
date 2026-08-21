@@ -4,7 +4,16 @@ capture program drop _journalone_write_baseline_rtf
 program define _journalone_write_baseline_rtf
     version 16.0
     syntax , FILE(string) TITLE(string) [DECIMALS(integer 3) STATISTIC(string) ///
-        PSTAR1(real .01) PSTAR2(real .05) PSTAR3(real .10)]
+        PSTAR1(real .01) PSTAR2(real .05) PSTAR3(real .10)                 ///
+        MODEL(string) CONTROLS(string) ABSORB(string) PANEL(string)       ///
+        TIME(string) TIMEFE CONTROLS2(string) ABSORB2(string) PANEL2(string) ///
+        TIME2(string) MODEL2(string) TIMEFE2 CONTROLS3(string)             ///
+        ABSORB3(string) PANEL3(string) TIME3(string) MODEL3(string)       ///
+        TIMEFE3 CONTROLS4(string) ABSORB4(string) PANEL4(string)           ///
+        TIME4(string) MODEL4(string) TIMEFE4 CONTROLS5(string) ABSORB5(string) ///
+        PANEL5(string) TIME5(string) MODEL5(string) TIMEFE5                  ///
+        CONTROLS6(string) ABSORB6(string) PANEL6(string) TIME6(string)       ///
+        MODEL6(string) TIMEFE6 ADDCONTROLS(string) ADDFE(string)]
 
     if "`statistic'" == "" local statistic "se"
     local statistic = lower(strtrim("`statistic'"))
@@ -38,7 +47,7 @@ program define _journalone_write_baseline_rtf
     * even when model 1 contains fewer controls than later columns.
     if `has_constant' local terms = strtrim("`terms' _cons")
     local model_count : word count `specifications'
-    if `model_count' < 1 | `model_count' > 4 exit 198
+    if `model_count' < 1 | `model_count' > 6 exit 198
 
     forvalues model_index = 1/`model_count' {
         local this_specification : word `model_index' of `specifications'
@@ -130,6 +139,23 @@ program define _journalone_write_baseline_rtf
         }
         file write `rtf_handle' "\par" _n
     }
+
+    * Publication tables report the actual design rows, not assumed defaults.
+    _journalone_write_spec_meta_rows, handle(`rtf_handle')                 ///
+        tabs(`"`table_tabs'"')                                            ///
+        specs("`specifications'") model("`model'") controls(`"`controls'"') ///
+        absorb(`"`absorb'"') panel("`panel'") time("`time'") `timefe'  ///
+        controls2(`"`controls2'"') absorb2(`"`absorb2'"')                 ///
+        panel2("`panel2'") time2("`time2'") model2("`model2'") `timefe2' ///
+        controls3(`"`controls3'"') absorb3(`"`absorb3'"')                 ///
+        panel3("`panel3'") time3("`time3'") model3("`model3'") `timefe3' ///
+        controls4(`"`controls4'"') absorb4(`"`absorb4'"')                 ///
+        panel4("`panel4'") time4("`time4'") model4("`model4'") `timefe4' ///
+        controls5(`"`controls5'"') absorb5(`"`absorb5'"')                 ///
+        panel5("`panel5'") time5("`time5'") model5("`model5'") `timefe5' ///
+        controls6(`"`controls6'"') absorb6(`"`absorb6'"')                 ///
+        panel6("`panel6'") time6("`time6'") model6("`model6'") `timefe6' ///
+        addcontrols(`"`addcontrols'"') addfe(`"`addfe'"')
 
     _journalone_rtf_escape, text("N")
     file write `rtf_handle' "\pard\keep\sb0\sa0\sl360\slmult1`table_tabs'\ql `r(escaped)'"

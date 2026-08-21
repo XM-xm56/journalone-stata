@@ -8,14 +8,19 @@ program define _journalone_write_desc_rtf
     quietly count
     if r(N) == 0 exit 2000
 
-    _journalone_rtf_escape, text(`"`title'"')
+    * Keep the Chinese table/file names; only the statistical headers are English.
+    local output_title `"`title'"'
+    if inlist(strtrim(`"`title'"'), "描述性统计分析", "描述性统计") {
+        local output_title "表 A1：描述性统计"
+    }
+    _journalone_rtf_escape, text(`"`output_title'"')
     local rtf_title `"`r(escaped)'"'
-    local header1 "变量"
+    local header1 "Variable"
     local header2 "N"
-    local header3 "均值"
-    local header4 "标准差"
-    local header5 "最小值"
-    local header6 "最大值"
+    local header3 "Mean"
+    local header4 "SD"
+    local header5 "Min"
+    local header6 "Max"
     forvalues column = 1/6 {
         _journalone_rtf_escape, text(`"`header`column''"')
         local rtf_header`column' `"`r(escaped)'"'

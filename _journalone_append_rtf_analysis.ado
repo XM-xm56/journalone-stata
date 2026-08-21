@@ -1,4 +1,4 @@
-*! version 0.9.10 17aug2026
+*! version 0.9.17 19aug2026
 
 capture program drop _journalone_append_rtf_analysis
 program define _journalone_append_rtf_analysis
@@ -79,8 +79,6 @@ program define _journalone_append_rtf_analysis
         }
         local zero_sd_names = strtrim("`zero_sd_names'")
 
-        local paragraph1 "描述性统计用于概括样本的集中趋势、离散程度和取值范围。本表共报告`variable_count'个变量，各变量的非缺失观测数介于`n_min_display'至`n_max_display'；均值反映平均水平，标准差越大表示样本差异通常越明显，最小值和最大值用于观察变量的实际取值边界。"
-
         if `total_slots' > 0 {
             local missing_rate = 100*`total_missing'/`total_slots'
             local missing_display = strtrim(string(`missing_rate', "%9.1f"))
@@ -88,26 +86,12 @@ program define _journalone_append_rtf_analysis
             local missing_assessment "整体缺失较少"
             if `missing_rate' > 5 & `missing_rate' <= 20 local missing_assessment "存在一定缺失"
             if `missing_rate' > 20 local missing_assessment "缺失比例较高"
-            local paragraph2 "按变量－观测单元汇总，总体缺失比例为`missing_display'%（`missing_assessment'）。缺失比例最高的变量为`max_missing_variable'，其缺失比例为`max_missing_display'%；后续回归应说明采用完整案例、删除还是插补，并检查不同处理是否改变样本构成。"
+            local summary_text "结果表明，本表报告`variable_count'个变量，非缺失观测数介于`n_min_display'至`n_max_display'。总体缺失比例为`missing_display'%（`missing_assessment'），其中`max_missing_variable'的缺失比例最高，为`max_missing_display'%。"
         }
-        else local paragraph2 "当前表未提供统一总样本量，因此不能直接计算总体缺失比例；正式分析前仍应回到原始数据核对各变量的有效观测数和缺失模式。"
+        else local summary_text "结果表明，本表报告`variable_count'个变量，非缺失观测数介于`n_min_display'至`n_max_display'。当前表未提供统一总样本量，因此不能直接计算总体缺失比例。"
 
-        if `invalid_count' == 0 {
-            local paragraph3 "从表内数值关系看，未发现样本量非正、标准差为负、最小值大于最大值、均值落在取值范围之外或缺失数不一致等明显错误，结果在统计口径上基本自洽。"
-        }
-        else local paragraph3 "表内发现`invalid_count'处需要复核的数值关系，可能涉及样本量、标准差、取值范围或缺失数不一致；在解释结果前应先核对原始变量和生成过程。"
-
-        if `zero_sd_count' > 0 {
-            local paragraph4 "变量`zero_sd_names'的标准差为0，说明其在当前样本中没有变化，通常不能为回归系数提供识别信息；若它本应随个体或时间变化，需要检查筛选条件或变量构造。"
-            if `zero_sd_count' > 5 local paragraph4 "有`zero_sd_count'个变量的标准差为0，其中包括`zero_sd_names'等；这些变量在当前样本中没有变化，通常不能为回归系数提供识别信息。"
-        }
-        else local paragraph4 "表中变量均存在样本内变异，未发现标准差为0的常量变量。"
-
-        local paragraph5 "最小值和最大值是否合理必须结合变量定义、单位和理论范围判断。若取值超出合理范围，应先检查录入、合并、单位换算和编码；只有在研究方案预先规定且极端值确需处理时，才进行缩尾或截尾并保留处理前后的稳健性比较。缺失值也应按预设规则处理，不应为了获得显著结果而随意删除或插补。"
-
-        local summary_text "结果表明，本表报告`variable_count'个变量，非缺失观测数介于`n_min_display'至`n_max_display'。"
-        if `total_slots' > 0 {
-            local summary_text "`summary_text'总体缺失比例为`missing_display'%（`missing_assessment'），其中`max_missing_variable'的缺失比例最高，为`max_missing_display'%。"
+        if `zero_sd_count' == 0 & `invalid_count' == 0 {
+            local summary_text "`summary_text'主要统计量未见明显数值异常；极值是否合理仍需结合变量定义和单位判断。"
         }
         if `zero_sd_count' > 0 {
             local zero_sd_summary "变量`zero_sd_names'的标准差为0，在当前样本中没有变化，进入回归前应复核。"
@@ -116,9 +100,6 @@ program define _journalone_append_rtf_analysis
         }
         if `invalid_count' > 0 {
             local summary_text "`summary_text'另有`invalid_count'处样本量、缺失数或取值范围关系需要核对。"
-        }
-        else if `zero_sd_count' == 0 {
-            local summary_text "`summary_text'主要统计量未见明显数值异常；极值是否合理仍需结合变量定义和单位判断。"
         }
     }
 
@@ -132,6 +113,14 @@ program define _journalone_append_rtf_analysis
         }
         local specifications = strtrim("`specifications'")
         local specification_count : word count `specifications'
+
+        local iv_stage_count 0
+        local heckman_stage_count 0
+        forvalues stage_row = 1/`=_N' {
+            if substr(specification[`stage_row'],1,9) == "iv_first_" | ///
+                specification[`stage_row'] == "iv_2sls" local iv_stage_count = 1
+            if inlist(specification[`stage_row'], "heckman_selection", "heckman_twostep") local heckman_stage_count = 1
+        }
 
         local focus_count = 0
         local positive_count = 0
@@ -190,7 +179,7 @@ program define _journalone_append_rtf_analysis
                     if p_value[`focus_row'] <= `pstar3' local ++sig3_count
                 }
 
-                if `focus_count' <= 4 {
+                if `focus_count' <= 6 {
                     local focus_label "`this_specification'"
                     if `has_specification_label' {
                         if strtrim(specification_label[`focus_row']) != "" {
@@ -211,14 +200,14 @@ program define _journalone_append_rtf_analysis
                 }
             }
         }
-        if `focus_count' > 4 {
-            local remaining_focus = `focus_count' - 4
+        if `focus_count' > 6 {
+            local remaining_focus = `focus_count' - 6
             local focus_details "`focus_details'；其余`remaining_focus'个规格的主要系数见表中对应结果"
         }
 
         local module_intro "回归分析用于考察解释变量与被解释变量在既定模型中的条件相关关系。"
         if "`type'" == "baseline" {
-            local module_intro "基准回归用于考察核心解释变量与被解释变量在既定模型中的关系。表中各列依次对应界面中的模型1至模型4，控制变量、固定效应、样本和标准误设置以实际填写内容为准，而不是自动假定后一列一定比前一列增加控制变量。"
+            local module_intro "基准回归用于考察核心解释变量与被解释变量在既定模型中的关系。表中各列依次对应界面中的模型1至模型6，控制变量、固定效应、样本和标准误设置以实际填写内容为准，而不是自动假定后一列一定比前一列增加控制变量。"
         }
         else if strpos("`title'", "稳健") {
             local module_intro "稳健性检验用于观察核心结论在替换变量、调整样本、改变固定效应或标准误等预先设定的替代规格下是否保持稳定。"
@@ -336,6 +325,20 @@ program define _journalone_append_rtf_analysis
         if strpos("`title'", "异质") local concise_caveat "组间差异应以正式系数检验判断，不能只比较两组是否带星。"
         if strpos("`title'", "显著组合") local concise_caveat "应保留全部预设规格，避免只报告显著结果。"
         local summary_text "`summary_text'`concise_caveat'"
+        if inlist("`type'", "baseline", "regression") {
+            local design_note "表中的控制变量、时间固定效应和个体固定效应行按各列实际估计设定报告；‘是’仅表示该项进入估计式，不自动等于识别假设成立。"
+            local summary_text "`summary_text'`design_note'"
+        }
+        if strpos("`title'", "稳健") {
+            local robustness_note "比较稳健性时应同时观察核心系数的方向、显著性、样本量和调整后R²；若只替换变量、滞后期、样本或固定效应而结论仍稳定，才可表述为对这些已实施替代设定不敏感。"
+            local summary_text "`summary_text'`robustness_note'"
+        }
+        * Append the multi-equation explanation after the main summary is
+        * assembled; adding it earlier would be overwritten by focus_details.
+        if strpos("`title'", "内生") & (`iv_stage_count' | `heckman_stage_count') {
+            local stage_note "本表把多阶段估计按方程分别列出：IV第一阶段报告内生变量对工具变量的回归及排除工具变量联合F值，IV第二阶段报告结构方程；Heckman第一阶段为选择方程Probit，第二阶段为结果方程并保留逆米尔斯比率。第一阶段与第二阶段的被解释变量不同，不能将两列系数直接作大小比较。"
+            local summary_text "`summary_text'`stage_note'"
+        }
     }
 
     if "`type'" == "diagnostics" {

@@ -54,13 +54,18 @@ program define journalone_descriptive_only, rclass
     export delimited using `"`descriptive_file'"', replace
     clonevar N = N_nonmissing
     clonevar Missing = N_missing
-    format variable %-24s
+    rename variable Variable
+    rename mean Mean
+    rename sd SD
+    rename min Min
+    rename max Max
+    format Variable %-24s
     format N Missing %12.0fc
-    format mean sd min max %14.`decimals'f
+    format Mean SD Min Max %14.`decimals'f
     local original_linesize = c(linesize)
     quietly set linesize 255
     noisily display as text "描述性统计（独立模块样本）"
-    noisily list variable N Missing mean sd min max, ///
+    noisily list Variable N Missing Mean SD Min Max, ///
         noobs separator(0) abbreviate(24)
     quietly set linesize `original_linesize'
     restore
@@ -68,7 +73,7 @@ program define journalone_descriptive_only, rclass
     capture noisily journalone_format_outputs, resultbase(`"`resultbase'"') ///
         descriptive(`"`descriptive_dta'"') decimals(`decimals')             ///
         statistic("`statistic'") pstar1(`pstar1') pstar2(`pstar2')          ///
-        pstar3(`pstar3') reportmode("`reportmode'")
+        pstar3(`pstar3') reportmode("none")
     local format_rc = _rc
     local report_file ""
     if `format_rc' {
@@ -129,7 +134,8 @@ program define journalone_descriptive_only, rclass
 
     noisily display as result "运行完成：`overall'（仅描述性统计）"
     noisily display as text "描述性统计：`descriptive_file'"
-    if "`report_file'" != "" noisily display as text "Word报告：`report_file'"
+    if strtrim(`"`report_file'"') != "" capture erase `"`report_file'"'
+    local report_file ""
     if "`package_output_dirs'" != "" noisily display as result "期刊三件套结果文件夹：`package_output_dirs'"
 
     return local status "`overall'"

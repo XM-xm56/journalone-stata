@@ -7,6 +7,7 @@ program define _journalone_run_spec, rclass
         DEPVAR(string) [ INDEPVARS(string) CONTROLS(string)           ///
         PANEL(string) TIME(string) ABSORB(string) TIMEFE               ///
         VCETYPE(string) CLUSTER(string) TREAT(string) POSTVAR(string)  ///
+        IVCLUSTER(string)                                                ///
         ENDOG(string) INSTRUMENTS(string) IFCOND(string)               ///
         LEVEL(real 95) ]
 
@@ -16,6 +17,7 @@ program define _journalone_run_spec, rclass
         indepvars(`"`indepvars'"') controls(`"`controls'"')            ///
         panel("`panel'") time("`time'") absorb(`"`absorb'"')          ///
         vcetype("`vcetype'") cluster("`cluster'")                     ///
+        ivcluster("`ivcluster'")                                         ///
         treat("`treat'") postvar("`postvar'") endog(`"`endog'"')     ///
         instruments(`"`instruments'"') ifcond(`"`ifcond'"') `timefeopt'
     local rc = _rc
@@ -26,5 +28,7 @@ program define _journalone_run_spec, rclass
     }
     _journalone_post_current, handle(`handle') runid("`runid'") ///
         spec("`spec'") outcome("`depvar'") level(`level')
+    _journalone_post_iv_diagnostics, handle(`handle') runid("`runid'") ///
+        spec("`spec'") outcome("`depvar'")
     return scalar rc = 0
 end
