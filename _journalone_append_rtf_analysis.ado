@@ -1,4 +1,4 @@
-*! version 0.9.17 19aug2026
+*! version 0.9.18 05sep2026
 
 capture program drop _journalone_append_rtf_analysis
 program define _journalone_append_rtf_analysis
@@ -79,6 +79,7 @@ program define _journalone_append_rtf_analysis
         }
         local zero_sd_names = strtrim("`zero_sd_names'")
 
+        local sample_detail "结果表明，本表报告`variable_count'个变量，非缺失观测数介于`n_min_display'至`n_max_display'。"
         if `total_slots' > 0 {
             local missing_rate = 100*`total_missing'/`total_slots'
             local missing_display = strtrim(string(`missing_rate', "%9.1f"))
@@ -86,21 +87,29 @@ program define _journalone_append_rtf_analysis
             local missing_assessment "整体缺失较少"
             if `missing_rate' > 5 & `missing_rate' <= 20 local missing_assessment "存在一定缺失"
             if `missing_rate' > 20 local missing_assessment "缺失比例较高"
-            local summary_text "结果表明，本表报告`variable_count'个变量，非缺失观测数介于`n_min_display'至`n_max_display'。总体缺失比例为`missing_display'%（`missing_assessment'），其中`max_missing_variable'的缺失比例最高，为`max_missing_display'%。"
+            local missing_detail "总体缺失比例为`missing_display'%（`missing_assessment'），其中`max_missing_variable'的缺失比例最高，为`max_missing_display'%。"
         }
-        else local summary_text "结果表明，本表报告`variable_count'个变量，非缺失观测数介于`n_min_display'至`n_max_display'。当前表未提供统一总样本量，因此不能直接计算总体缺失比例。"
+        else local missing_detail "当前表未提供统一总样本量，因此不能直接计算总体缺失比例。"
 
-        if `zero_sd_count' == 0 & `invalid_count' == 0 {
-            local summary_text "`summary_text'主要统计量未见明显数值异常；极值是否合理仍需结合变量定义和单位判断。"
-        }
+        local variation_detail "主要统计量未见明显数值异常；极值是否合理仍需结合变量定义和单位判断。"
         if `zero_sd_count' > 0 {
             local zero_sd_summary "变量`zero_sd_names'的标准差为0，在当前样本中没有变化，进入回归前应复核。"
             if `zero_sd_count' > 5 local zero_sd_summary "共有`zero_sd_count'个变量的标准差为0，包括`zero_sd_names'等，在当前样本中没有变化，进入回归前应复核。"
-            local summary_text "`summary_text'`zero_sd_summary'"
+            local variation_detail "`zero_sd_summary'其余均值、标准差和极值仍需结合变量定义判断。"
         }
-        if `invalid_count' > 0 {
-            local summary_text "`summary_text'另有`invalid_count'处样本量、缺失数或取值范围关系需要核对。"
+
+        local paragraph1 "描述性统计用于概括样本中各变量的中心位置、离散程度和取值范围。`sample_detail'"
+        local paragraph2 "样本完整性检查结果为：`missing_detail'缺失处理方式应与研究设计保持一致，不能只根据非缺失样本量直接判断样本代表性。"
+        local paragraph3 "变量分布检查结果为：`variation_detail'"
+        if `invalid_count' == 0 {
+            local paragraph4 "数据质量校验未发现样本量为负、均值超出极值范围或标准差为负等明显数值错误。"
         }
+        else local paragraph4 "数据质量校验发现`invalid_count'处样本量、缺失数或取值范围关系需要核对，建议在回归前回到原始数据复查。"
+        local paragraph5 "均值和标准差描述的是样本内分布，最小值和最大值用于发现极端取值；它们不能单独说明变量之间的因果关系，也不能替代异常值、缩尾或变换处理的敏感性分析。"
+        local paragraph6 "描述性统计的最终解释应结合变量单位、测量口径、样本筛选和缺失处理规则；若变量没有足够变异或极值明显异常，应先完成数据核验再进入后续模型。"
+
+        local summary_text "重点结果为：`sample_detail'`missing_detail'`variation_detail'"
+        if `invalid_count' > 0 local summary_text "`summary_text'另有`invalid_count'处数据质量关系需要复核。"
     }
 
     if inlist("`type'", "regression", "baseline") {
@@ -503,8 +512,32 @@ program define _journalone_append_rtf_analysis
         local summary_text "`summary_text'这些阈值仅用于风险提示，不能单独证明模型设定或因果识别成立。"
     }
 
+    * Write every generated explanation as its own numbered paragraph.  The
+    * table remains untouched; only the narrative block appended after it is
+    * formatted here.  Keeping the summary as a final paragraph preserves a
+    * concise machine-checkable conclusion while the numbered paragraphs give
+    * readers the detailed interpretation shown in the publication example.
+    local narrative_number = 0
+    forvalues index = 1/6 {
+        if strtrim(`"`paragraph`index''"') != "" {
+            local ++narrative_number
+            local narrative_text "`narrative_number'. `paragraph`index''"
+            file write `handle' "\pard\qj\fi420\sb120\sa0\sl360\slmult1\f0\fs18 "
+            local remaining_text `"`narrative_text'"'
+            while ustrlen(`"`remaining_text'"') > 0 {
+                local text_chunk = usubstr(`"`remaining_text'"', 1, 160)
+                _journalone_rtf_escape, text(`"`text_chunk'"')
+                file write `handle' "`r(escaped)'"
+                local remaining_text = usubstr(`"`remaining_text'"', 161, .)
+            }
+            file write `handle' "\par" _n
+        }
+    }
     if strtrim(`"`summary_text'"') != "" {
-        file write `handle' "\pard\qj\fi420\sb120\sa0\sl360\slmult1\f0\fs18 "
+        file write `handle' "\pard\qj\fi420\sb120\sa0\sl360\slmult1\f0\fs18\b "
+        local summary_label "综合判断："
+        _journalone_rtf_escape, text(`"`summary_label'"')
+        file write `handle' "`r(escaped)'\b0 "
         local remaining_text `"`summary_text'"'
         while ustrlen(`"`remaining_text'"') > 0 {
             local text_chunk = usubstr(`"`remaining_text'"', 1, 160)

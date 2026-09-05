@@ -1,4 +1,4 @@
-*! version 0.9.17 19aug2026
+*! version 0.9.18 05sep2026
 
 capture program drop journalone_write_do
 program define journalone_write_do, rclass
@@ -9,23 +9,24 @@ program define journalone_write_do, rclass
           MODEL(string) DEPVAR(string) INDEPVARS(string) CONTROLS(string) ///
           PANEL(string) TIME(string) ABSORB(string) TIMEFE              ///
           VCETYPE(string) CLUSTER(string) IVCLUSTER(string) TREAT(string) ///
+          IFCOND(string asis)                                           ///
           MODEL2(string) DEPVAR2(string) INDEPVARS2(string) CONTROLS2(string) ///
           PANEL2(string) TIME2(string) ABSORB2(string) TIMEFE2          ///
-          VCETYPE2(string) CLUSTER2(string) IFCOND2(string)            ///
+          VCETYPE2(string) CLUSTER2(string) IFCOND2(string asis)       ///
           MODEL3(string) DEPVAR3(string) INDEPVARS3(string) CONTROLS3(string) ///
           PANEL3(string) TIME3(string) ABSORB3(string) TIMEFE3          ///
-          VCETYPE3(string) CLUSTER3(string) IFCOND3(string)            ///
+          VCETYPE3(string) CLUSTER3(string) IFCOND3(string asis)       ///
           MODEL4(string) DEPVAR4(string) INDEPVARS4(string) CONTROLS4(string) ///
           PANEL4(string) TIME4(string) ABSORB4(string) TIMEFE4          ///
-          VCETYPE4(string) CLUSTER4(string) IFCOND4(string)            ///
+          VCETYPE4(string) CLUSTER4(string) IFCOND4(string asis)       ///
           MODEL5(string) DEPVAR5(string) INDEPVARS5(string) CONTROLS5(string) ///
           PANEL5(string) TIME5(string) ABSORB5(string) TIMEFE5          ///
-          VCETYPE5(string) CLUSTER5(string) IFCOND5(string)            ///
+          VCETYPE5(string) CLUSTER5(string) IFCOND5(string asis)       ///
           MODEL6(string) DEPVAR6(string) INDEPVARS6(string) CONTROLS6(string) ///
           PANEL6(string) TIME6(string) ABSORB6(string) TIMEFE6          ///
-          VCETYPE6(string) CLUSTER6(string) IFCOND6(string)            ///
+          VCETYPE6(string) CLUSTER6(string) IFCOND6(string asis)       ///
           POSTVAR(string) ENDOG(string) INSTRUMENTS(string) OVBTEST      ///
-          IFCOND(string) DESCVARS(string) DESCSAMPLE(string)            ///
+          DESCVARS(string) DESCSAMPLE(string)                            ///
           SPECS(string) ALTY(string) ALTX(string) CUSTOMSPECS(string)      ///
           ADDCONTROLS(string)                                           ///
           ADDFE(string) LAGS(string) LEADS(string) SUBSAMPLE(string)    ///
@@ -78,7 +79,20 @@ program define journalone_write_do, rclass
     local dmlinstruments = subinstr(strtrim(`"`dmlinstruments'"'), char(34), "", .)
     local dmlcontrols = subinstr(strtrim(`"`dmlcontrols'"'), char(34), "", .)
     local customspecs = subinstr(strtrim(`"`customspecs'"'), char(34), "", .)
-    local ifcond = subinstr(strtrim(`"`ifcond'"'), char(34), "", .)
+    * Preserve quotes inside string-valued sample conditions; remove only the
+    * transport layers added while forwarding syntax(string asis) options.
+    _journalone_clean_ifcond, value(`"`ifcond'"')
+    local ifcond `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond2'"')
+    local ifcond2 `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond3'"')
+    local ifcond3 `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond4'"')
+    local ifcond4 `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond5'"')
+    local ifcond5 `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond6'"')
+    local ifcond6 `"`r(value)'"'
     local datafile = subinstr(`"`datafile'"', "\", "/", .)
     local outputdir = subinstr(`"`outputdir'"', "\", "/", .)
     local workdir = subinstr(`"`c(pwd)'"', "\", "/", .)
@@ -179,7 +193,9 @@ program define journalone_write_do, rclass
     if "`cluster'" != "" file write `do_handle' "* 聚类变量：`cluster'" _n
     if "`treat'" != "" file write `do_handle' "* 处理组变量：`treat'" _n
     if "`postvar'" != "" file write `do_handle' "* 政策后变量：`postvar'" _n
-    if strtrim(`"`ifcond'"') != "" file write `do_handle' "* 样本条件：`ifcond'" _n
+    if strtrim(`"`ifcond'"') != "" {
+        file write `do_handle' "* 样本条件：" `"`ifcond'"' _n
+    }
     forvalues baseline_index = 2/6 {
         local baseline_depvar_name "depvar`baseline_index'"
         local baseline_model_name "model`baseline_index'"
@@ -198,7 +214,9 @@ program define journalone_write_do, rclass
             if strtrim(`"`baseline_indepvars'"') != "" file write `do_handle' "* 模型`baseline_index'核心解释变量：`baseline_indepvars'" _n
             if strtrim(`"`baseline_controls'"') != "" file write `do_handle' "* 模型`baseline_index'控制变量：`baseline_controls'" _n
             if strtrim(`"`baseline_absorb'"') != "" file write `do_handle' "* 模型`baseline_index'固定效应：`baseline_absorb'" _n
-            if strtrim(`"`baseline_ifcond'"') != "" file write `do_handle' "* 模型`baseline_index'样本条件：`baseline_ifcond'" _n
+            if strtrim(`"`baseline_ifcond'"') != "" {
+                file write `do_handle' "* 模型`baseline_index'样本条件：" `"`baseline_ifcond'"' _n
+            }
         }
     }
     if "`panel'" != "" {
@@ -871,7 +889,10 @@ program define _journalone_do_emit_model, rclass
         DEPVAR(string) [ INDEPVARS(string) CONTROLS(string)            ///
         PANEL(string) TIME(string) ABSORB(string) TIMEFE               ///
         VCETYPE(string) CLUSTER(string) IVCLUSTER(string) TREAT(string) POSTVAR(string)  ///
-        ENDOG(string) INSTRUMENTS(string) IFCOND(string) CONTROLSMACRO ]
+        ENDOG(string) INSTRUMENTS(string) IFCOND(string asis) CONTROLSMACRO ]
+
+    _journalone_clean_ifcond, value(`"`ifcond'"')
+    local ifcond `"`r(value)'"'
 
     local command_controls `"`controls'"'
     if "`controlsmacro'" != "" & strtrim(`"`controls'"') != "" {
@@ -906,7 +927,10 @@ program define _journalone_do_build_command, rclass
         [ INDEPVARS(string) CONTROLS(string)                            ///
           PANEL(string) TIME(string) ABSORB(string) TIMEFE             ///
           VCETYPE(string) CLUSTER(string) IVCLUSTER(string) TREAT(string) ///
-          POSTVAR(string) ENDOG(string) INSTRUMENTS(string) IFCOND(string) ]
+          POSTVAR(string) ENDOG(string) INSTRUMENTS(string) IFCOND(string asis) ]
+
+    _journalone_clean_ifcond, value(`"`ifcond'"')
+    local ifcond `"`r(value)'"'
 
     if "`vcetype'" == "" local vcetype "conventional"
     local ifqual ""
@@ -945,6 +969,7 @@ program define _journalone_do_build_command, rclass
         if "`ifqual'" != "" local command `"`command' `ifqual'"'
         local command `"`command', `hdfe_absorbopt'"'
         if "`vceopt'" != "" local command `"`command' `vceopt'"'
+        if "$JOURNALONE_KEEP_SINGLETONS" == "1" local command `"`command' keepsingletons"'
     }
     else if "`model'" == "fe" {
         local command "xtreg `depvar'"
@@ -1000,6 +1025,7 @@ program define _journalone_do_build_command, rclass
             local command `"`command', absorb(`iv_absorb')"'
             if "`vcetype'" == "robust" local command `"`command' robust"'
             else if "`vcetype'" == "cluster" local command `"`command' cluster(`iv_cluster')"'
+            if "$JOURNALONE_KEEP_SINGLETONS" == "1" local command `"`command' keepsingletons"'
             local command `"`command'    // 需要已安装 ivreghdfe；否则改用 ivregress 2sls"'
         }
         else {

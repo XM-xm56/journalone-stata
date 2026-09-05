@@ -1,4 +1,4 @@
-*! version 0.9.17 19aug2026
+*! version 0.9.18 05sep2026
 
 capture program drop _journalone_add_spec_labels
 program define _journalone_add_spec_labels

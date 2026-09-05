@@ -1,4 +1,4 @@
-*! version 0.9.17 19aug2026
+*! version 0.9.18 05sep2026
 
 capture program drop journalone_publish_outputs
 program define journalone_publish_outputs, rclass
@@ -9,23 +9,24 @@ program define journalone_publish_outputs, rclass
           MODEL(string) DEPVAR(string) INDEPVARS(string) CONTROLS(string) ///
           PANEL(string) TIME(string) ABSORB(string) TIMEFE               ///
           VCETYPE(string) CLUSTER(string) IVCLUSTER(string)              ///
+          IFCOND(string asis)                                           ///
           MODEL2(string) DEPVAR2(string) INDEPVARS2(string) CONTROLS2(string) ///
           PANEL2(string) TIME2(string) ABSORB2(string) TIMEFE2           ///
-          VCETYPE2(string) CLUSTER2(string) IFCOND2(string)              ///
+          VCETYPE2(string) CLUSTER2(string) IFCOND2(string asis)         ///
           MODEL3(string) DEPVAR3(string) INDEPVARS3(string) CONTROLS3(string) ///
           PANEL3(string) TIME3(string) ABSORB3(string) TIMEFE3           ///
-          VCETYPE3(string) CLUSTER3(string) IFCOND3(string)              ///
+          VCETYPE3(string) CLUSTER3(string) IFCOND3(string asis)         ///
           MODEL4(string) DEPVAR4(string) INDEPVARS4(string) CONTROLS4(string) ///
           PANEL4(string) TIME4(string) ABSORB4(string) TIMEFE4           ///
-          VCETYPE4(string) CLUSTER4(string) IFCOND4(string)              ///
+          VCETYPE4(string) CLUSTER4(string) IFCOND4(string asis)         ///
           MODEL5(string) DEPVAR5(string) INDEPVARS5(string) CONTROLS5(string) ///
           PANEL5(string) TIME5(string) ABSORB5(string) TIMEFE5           ///
-          VCETYPE5(string) CLUSTER5(string) IFCOND5(string)              ///
+          VCETYPE5(string) CLUSTER5(string) IFCOND5(string asis)         ///
           MODEL6(string) DEPVAR6(string) INDEPVARS6(string) CONTROLS6(string) ///
           PANEL6(string) TIME6(string) ABSORB6(string) TIMEFE6           ///
-          VCETYPE6(string) CLUSTER6(string) IFCOND6(string)              ///
+          VCETYPE6(string) CLUSTER6(string) IFCOND6(string asis)         ///
           TREAT(string) POSTVAR(string) ENDOG(string) INSTRUMENTS(string) OVBTEST ///
-          IFCOND(string) DESCSAMPLE(string) ALTY(string) ALTX(string)    ///
+          DESCSAMPLE(string) ALTY(string) ALTX(string)                   ///
           CUSTOMSPECS(string)                                            ///
           ADDCONTROLS(string) ADDFE(string) LAGS(string) LEADS(string)  ///
           SUBSAMPLE(string) ALTVCE(string) ALTCLUSTER(string)           ///
@@ -69,7 +70,20 @@ program define journalone_publish_outputs, rclass
     local dmlinstruments = subinstr(strtrim(`"`dmlinstruments'"'), char(34), "", .)
     local dmlcontrols = subinstr(strtrim(`"`dmlcontrols'"'), char(34), "", .)
     local customspecs = subinstr(strtrim(`"`customspecs'"'), char(34), "", .)
-    local ifcond = subinstr(strtrim(`"`ifcond'"'), char(34), "", .)
+    * Preserve quotes inside string-valued sample conditions and remove only
+    * the transport layers added while forwarding syntax(string asis) options.
+    _journalone_clean_ifcond, value(`"`ifcond'"')
+    local ifcond `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond2'"')
+    local ifcond2 `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond3'"')
+    local ifcond3 `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond4'"')
+    local ifcond4 `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond5'"')
+    local ifcond5 `"`r(value)'"'
+    _journalone_clean_ifcond, value(`"`ifcond6'"')
+    local ifcond6 `"`r(value)'"'
     local publishmodules = lower(subinstr(strtrim(`"`publishmodules'"'), char(34), "", .))
     if strtrim(`"`publishmodules'"') != "" {
         local normalized_publishmodules ""
@@ -398,23 +412,23 @@ program define journalone_publish_outputs, rclass
                         model2("`model2'") depvar2("`depvar2'") indepvars2(`"`indepvars2'"') ///
                         controls2(`"`controls2'"') panel2("`panel2'") time2("`time2'") ///
                         absorb2(`"`absorb2'"') vcetype2("`vcetype2'") cluster2("`cluster2'") ///
-                        ifcond2(`"`ifcond2'"') model3("`model3'") depvar3("`depvar3'") ///
+                        ifcond2(`ifcond2') model3("`model3'") depvar3("`depvar3'") ///
                         indepvars3(`"`indepvars3'"') controls3(`"`controls3'"') ///
                         panel3("`panel3'") time3("`time3'") absorb3(`"`absorb3'"') ///
-                        vcetype3("`vcetype3'") cluster3("`cluster3'") ifcond3(`"`ifcond3'"') ///
+                        vcetype3("`vcetype3'") cluster3("`cluster3'") ifcond3(`ifcond3') ///
                         model4("`model4'") depvar4("`depvar4'") indepvars4(`"`indepvars4'"') ///
                         controls4(`"`controls4'"') panel4("`panel4'") time4("`time4'") ///
                         absorb4(`"`absorb4'"') vcetype4("`vcetype4'") cluster4("`cluster4'") ///
-                        ifcond4(`"`ifcond4'"')                            ///
+                        ifcond4(`ifcond4')                            ///
                         model5("`model5'") depvar5("`depvar5'") indepvars5(`"`indepvars5'"') ///
                         controls5(`"`controls5'"') panel5("`panel5'") time5("`time5'") ///
                         absorb5(`"`absorb5'"') vcetype5("`vcetype5'") cluster5("`cluster5'") ///
-                        ifcond5(`"`ifcond5'"') model6("`model6'") depvar6("`depvar6'") ///
+                        ifcond5(`ifcond5') model6("`model6'") depvar6("`depvar6'") ///
                         indepvars6(`"`indepvars6'"') controls6(`"`controls6'"') ///
                         panel6("`panel6'") time6("`time6'") absorb6(`"`absorb6'"') ///
-                        vcetype6("`vcetype6'") cluster6("`cluster6'") ifcond6(`"`ifcond6'"') ///
+                        vcetype6("`vcetype6'") cluster6("`cluster6'") ifcond6(`ifcond6') ///
                         treat("`treat'") postvar("`postvar'") endog(`"`endog'"') ///
-                        instruments(`"`instruments'"') ifcond(`"`ifcond'"')   ///
+                        instruments(`"`instruments'"') ifcond(`ifcond')   ///
                         specs(`"`do_specs'"') alty(`"`alty'"') altx(`"`altx'"') ///
                         customspecs(`"`customspecs'"')                           ///
                         addcontrols(`"`addcontrols'"') addfe(`"`addfe'"')     ///

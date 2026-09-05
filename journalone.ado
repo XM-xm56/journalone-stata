@@ -1,4 +1,4 @@
-*! version 0.9.17 19aug2026
+*! version 0.9.18 05sep2026
 capture program drop journalone
 program define journalone, eclass
     version 16.0
@@ -52,7 +52,7 @@ program define journalone, eclass
            SEED(integer 20260814) REPLACE                      ///
            DESCSAMPLE(string) REPORTMODE(string)               ///
            DECIMALS(integer 3) STATISTIC(string)               ///
-           MISSINGMODE(string) PTREND PTLEVEL(real 95)         ///
+           MISSINGMODE(string) KEEPSINGLETONS PTREND PTLEVEL(real 95) ///
            PTBASE(integer -1) GROUPBINS(integer 0) GROUPTEST   ///
            SPLITHET MEDMETHOD(string) SPLITMED MODPLOT         ///
            PSMMETHOD(string) PSMCOVARS(string asis)             ///
@@ -75,7 +75,10 @@ program define journalone, eclass
     local addfe = subinstr(strtrim(`"`addfe'"'), char(34), "", .)
     local ivcluster = subinstr(strtrim(`"`ivcluster'"'), char(34), "", .)
     local subsample = subinstr(strtrim(`"`subsample'"'), char(34), "", .)
-    local ifcond = subinstr(strtrim(`"`ifcond'"'), char(34), "", .)
+    * Normalize transport quote layers while preserving quotes that are part
+    * of a string comparison (e.g. 是否是制造业=="C").
+    _journalone_clean_ifcond, value(`"`ifcond'"')
+    local ifcond `"`r(value)'"'
 
     * `string asis' options can retain the transport quotes used in a GUI
     * command such as mediators("m1 m2").  Strip those quotes before any
@@ -99,23 +102,36 @@ program define journalone, eclass
     local indepvars2 = subinstr(strtrim(`"`indepvars2'"'), char(34), "", .)
     local controls2 = subinstr(strtrim(`"`controls2'"'), char(34), "", .)
     local absorb2 = subinstr(strtrim(`"`absorb2'"'), char(34), "", .)
-    local ifcond2 = subinstr(strtrim(`"`ifcond2'"'), char(34), "", .)
+    _journalone_clean_ifcond, value(`"`ifcond2'"')
+    local ifcond2 `"`r(value)'"'
     local indepvars3 = subinstr(strtrim(`"`indepvars3'"'), char(34), "", .)
     local controls3 = subinstr(strtrim(`"`controls3'"'), char(34), "", .)
     local absorb3 = subinstr(strtrim(`"`absorb3'"'), char(34), "", .)
-    local ifcond3 = subinstr(strtrim(`"`ifcond3'"'), char(34), "", .)
+    _journalone_clean_ifcond, value(`"`ifcond3'"')
+    local ifcond3 `"`r(value)'"'
     local indepvars4 = subinstr(strtrim(`"`indepvars4'"'), char(34), "", .)
     local controls4 = subinstr(strtrim(`"`controls4'"'), char(34), "", .)
     local absorb4 = subinstr(strtrim(`"`absorb4'"'), char(34), "", .)
-    local ifcond4 = subinstr(strtrim(`"`ifcond4'"'), char(34), "", .)
+    _journalone_clean_ifcond, value(`"`ifcond4'"')
+    local ifcond4 `"`r(value)'"'
     local indepvars5 = subinstr(strtrim(`"`indepvars5'"'), char(34), "", .)
     local controls5 = subinstr(strtrim(`"`controls5'"'), char(34), "", .)
     local absorb5 = subinstr(strtrim(`"`absorb5'"'), char(34), "", .)
-    local ifcond5 = subinstr(strtrim(`"`ifcond5'"'), char(34), "", .)
+    _journalone_clean_ifcond, value(`"`ifcond5'"')
+    local ifcond5 `"`r(value)'"'
     local indepvars6 = subinstr(strtrim(`"`indepvars6'"'), char(34), "", .)
     local controls6 = subinstr(strtrim(`"`controls6'"'), char(34), "", .)
     local absorb6 = subinstr(strtrim(`"`absorb6'"'), char(34), "", .)
-    local ifcond6 = subinstr(strtrim(`"`ifcond6'"'), char(34), "", .)
+    _journalone_clean_ifcond, value(`"`ifcond6'"')
+    local ifcond6 `"`r(value)'"'
+
+    * reghdfe drops singleton observations by default.  The source programs
+    * supplied with many papers use xi:reg/regress with explicit country and
+    * year dummies, which retains those observations.  Keep the choice in a
+    * session-scoped flag so every baseline fit and generated DO command uses
+    * the same estimator semantics when the user checks KEEPSINGLETONS.
+    if "`keepsingletons'" != "" global JOURNALONE_KEEP_SINGLETONS "1"
+    else global JOURNALONE_KEEP_SINGLETONS "0"
 
     local has_base = (strtrim("`depvar'") != "")
     local descriptive_requested = ("`nodesc'" == "")
@@ -1301,22 +1317,22 @@ program define journalone, eclass
         model2("`model2'") depvar2("`depvar2'") indepvars2(`"`indepvars2'"') ///
         controls2(`"`controls2'"') panel2("`panel2'") time2("`time2'") ///
         absorb2(`"`absorb2'"') vcetype2("`vcetype2'") cluster2("`cluster2'") ///
-        ifcond2(`"`ifcond2'"') model3("`model3'") depvar3("`depvar3'") ///
+        ifcond2(`ifcond2') model3("`model3'") depvar3("`depvar3'") ///
         indepvars3(`"`indepvars3'"') controls3(`"`controls3'"') panel3("`panel3'") ///
         time3("`time3'") absorb3(`"`absorb3'"') vcetype3("`vcetype3'") ///
-        cluster3("`cluster3'") ifcond3(`"`ifcond3'"') model4("`model4'") ///
+        cluster3("`cluster3'") ifcond3(`ifcond3') model4("`model4'") ///
         depvar4("`depvar4'") indepvars4(`"`indepvars4'"') controls4(`"`controls4'"') ///
         panel4("`panel4'") time4("`time4'") absorb4(`"`absorb4'"') ///
-        vcetype4("`vcetype4'") cluster4("`cluster4'") ifcond4(`"`ifcond4'"') ///
+        vcetype4("`vcetype4'") cluster4("`cluster4'") ifcond4(`ifcond4') ///
         model5("`model5'") depvar5("`depvar5'") indepvars5(`"`indepvars5'"') ///
         controls5(`"`controls5'"') panel5("`panel5'") time5("`time5'") ///
         absorb5(`"`absorb5'"') vcetype5("`vcetype5'") cluster5("`cluster5'") ///
-        ifcond5(`"`ifcond5'"') model6("`model6'") depvar6("`depvar6'") ///
+        ifcond5(`ifcond5') model6("`model6'") depvar6("`depvar6'") ///
         indepvars6(`"`indepvars6'"') controls6(`"`controls6'"') panel6("`panel6'") ///
         time6("`time6'") absorb6(`"`absorb6'"') vcetype6("`vcetype6'") ///
-        cluster6("`cluster6'") ifcond6(`"`ifcond6'"') ///
+        cluster6("`cluster6'") ifcond6(`ifcond6') ///
         postvar("`post'") endog(`"`endog'"') instruments(`"`instruments'"') ///
-        ifcond(`"`ifcond'"') descsample("`descsample'")                ///
+        ifcond(`ifcond') descsample("`descsample'")                ///
         alty(`"`alty'"') altx(`"`altx'"') customspecs(`"`customspecs'"') ///
         addcontrols(`"`addcontrols'"') ///
         addfe(`"`addfe'"') lags("`lags'") leads("`leads'")           ///
@@ -1558,6 +1574,7 @@ program define _journalone_fit, eclass
         if strtrim(`"`hdfe_absorb'"') != "" local hdfe_absorbopt "absorb(`hdfe_absorb')"
         local hdfe_options ", `hdfe_absorbopt'"
         if "`vceopt'" != "" local hdfe_options "`hdfe_options' `vceopt'"
+        if "$JOURNALONE_KEEP_SINGLETONS" == "1" local hdfe_options "`hdfe_options' keepsingletons"
         reghdfe `depvar' `indepvars' `controls' `ifqual' `hdfe_options'
     }
     else if "`model'" == "fe" {
@@ -1615,6 +1632,7 @@ program define _journalone_fit, eclass
             local iv_options "absorb(`iv_absorb')"
             if "`vcetype'" == "robust" local iv_options "`iv_options' robust"
             else if "`vcetype'" == "cluster" local iv_options "`iv_options' cluster(`iv_cluster')"
+            if "$JOURNALONE_KEEP_SINGLETONS" == "1" local iv_options "`iv_options' keepsingletons"
             ivreghdfe `depvar' `iv_rhs' ///
                 (`endog' = `instruments') `ifqual', `iv_options'
         }

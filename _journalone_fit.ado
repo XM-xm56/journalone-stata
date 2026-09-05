@@ -1,4 +1,4 @@
-*! version 0.9.17 19aug2026
+*! version 0.9.18 05sep2026
 
 capture program drop _journalone_fit
 program define _journalone_fit, eclass
@@ -59,6 +59,7 @@ program define _journalone_fit, eclass
         if strtrim(`"`hdfe_absorb'"') != "" local hdfe_absorbopt "absorb(`hdfe_absorb')"
         local hdfe_options ", `hdfe_absorbopt'"
         if "`vceopt'" != "" local hdfe_options "`hdfe_options' `vceopt'"
+        if "$JOURNALONE_KEEP_SINGLETONS" == "1" local hdfe_options "`hdfe_options' keepsingletons"
         reghdfe `depvar' `indepvars' `controls' `ifqual' `hdfe_options'
     }
     else if "`model'" == "fe" {
@@ -125,6 +126,7 @@ program define _journalone_fit, eclass
             local iv_options "absorb(`iv_absorb')"
             if "`vcetype'" == "robust" local iv_options "`iv_options' robust"
             else if "`vcetype'" == "cluster" local iv_options "`iv_options' cluster(`iv_cluster')"
+            if "$JOURNALONE_KEEP_SINGLETONS" == "1" local iv_options "`iv_options' keepsingletons"
             ivreghdfe `depvar' `iv_rhs' ///
                 (`endog' = `instruments') `ifqual', `iv_options'
         }

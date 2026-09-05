@@ -383,6 +383,8 @@ BEGIN
     TEXT tx_modinteractions 495 @ 130 ., label("调节交互映射：")
     EDIT ed_modinteractions 635 @ 330 ., ///
         tooltip("按 调节变量=已有交互变量 填写；多项用英文分号分隔，例如 moderator_a=interaction_xw")
+    CHECKBOX ck_keep_singletons 700 390 280 ., label("HDFE保留单例观测") default(0) ///
+        tooltip("勾选后向reghdfe/ivreghdfe加入keepsingletons；用于与显式国家/年份虚拟变量回归保持样本量一致。请确认论文是否保留单例观测。")
 
     GROUPBOX gb_adjust 15 410 990 150, label("显著性调整与输出")
     TEXT tx_adjust 30 435 130 ., label("调整方式：")
@@ -564,6 +566,7 @@ BEGIN
     more.ck_mod_plot.disable
     more.ed_medclusters.disable
     more.ed_modinteractions.disable
+    more.ck_keep_singletons.disable
     more.cb_adjust.disable
     more.ed_winsor_low.disable
     more.ed_winsor_high.disable
@@ -726,6 +729,7 @@ BEGIN
     more.ck_mod_plot.enable
     more.ed_medclusters.enable
     more.ed_modinteractions.enable
+    more.ck_keep_singletons.enable
     more.cb_adjust.enable
     more.ed_winsor_low.enable
     more.ed_winsor_high.enable
@@ -2388,6 +2392,9 @@ BEGIN
     }
     if main.ck_ovb {
         put " ovbtest"
+    }
+    if more.ck_keep_singletons {
+        put " keepsingletons"
     }
     put " " /program baseline_model1_output
     put " " /program baseline_model2_output

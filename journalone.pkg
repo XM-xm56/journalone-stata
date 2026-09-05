@@ -1,6 +1,6 @@
 v 3
 d JournalOne native Stata GUI package
-d Version 0.9.17, 19 August 2026
+d Version 0.9.18, 5 September 2026
 f journalone_license.ado
 f journalone_license.sthlp
 f journalone_update.ado
@@ -13,6 +13,7 @@ f _journalone_license_read.ado
 f _journalone_require_license.ado
 f _journalone_parse_customspecs.ado
 f _journalone_lookup_map.ado
+f _journalone_clean_ifcond.ado
 f _journalone_write_spec_meta_rows.ado
 f _journalone_display_results_table.ado
 f _journalone_display_table.ado

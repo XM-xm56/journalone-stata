@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.17 19aug2026}{...}
+{* *! version 0.9.18 05sep2026}{...}
 {vieweralsosee "JournalOne authorization" "help journalone_license"}{...}
 {vieweralsosee "JournalOne one-click update" "help journalone_update"}{...}
 {vieweralsosee "JournalOne preprocessing" "help journalone_prep"}{...}
@@ -156,6 +156,7 @@
 {opt decimals(#)}
 {opt statistic(string)}
 {opt missingmode(string)}
+{opt keepsingletons}
 {opt pstar1(#)}
 {opt pstar2(#)}
 {opt pstar3(#)}
@@ -198,7 +199,7 @@
 
 {phang}{bf:稳健性检验：}{opt alty()}、{opt altx()}、{opt addcontrols()}、{opt addfe()}、{opt subsample()}、{opt lags()}、{opt leads()} 和 {opt altvce()} 运行预先设定的替代规格。{opt customspecs()} 允许把联动规格逐列登记为 {cmd:Y|X;Y|X}，也可加第三段样本条件 {cmd:Y|X|if}；例如 {cmd:y_alt|L2.x;y|x_alt|group_id==1}。两段写法沿用模型1的控制变量、固定效应、样本条件和标准误，第三段会与模型1的 {opt ifcond()} 合并。一次最多登记 40 列，足以覆盖替代变量、分组、滞后/超前和多维度实证规格，同时防止误输入造成无界组合。结果文件将模型1作为第1列，以“变量为行、稳健性规格为列”的标准回归三线表输出；为与基准回归保持一致，使用 A4 纵向页面，超过单页四列时自动拆为连续表，每张续表重复第1列。所有预设规格（显著和不显著）都会保留在 RTF、DO 和 CSV 中。{p_end}
 
-{phang}{bf:HDFE 固定效应与聚类：}选择 {cmd:hdfe} 时，{opt absorb()} 和 {opt addfe()} 可填写多个吸收固定效应；交互固定效应可采用 {cmd:group_id#time_id} 形式。{opt cluster()} 与 {opt altcluster()} 同样接受 HDFE 支持的交互聚类写法。OLS、FE、RE、DID 和 IV 仍应填写其各自命令可接受的变量或因子设定。{p_end}
+{phang}{bf:HDFE 固定效应与聚类：}选择 {cmd:hdfe} 时，{opt absorb()} 和 {opt addfe()} 可填写多个吸收固定效应；交互固定效应可采用 {cmd:group_id#time_id} 形式。{opt cluster()} 与 {opt altcluster()} 同样接受 HDFE 支持的交互聚类写法。OLS、FE、RE、DID 和 IV 仍应填写其各自命令可接受的变量或因子设定。{opt keepsingletons} 将该选项传给 {cmd:reghdfe}/{cmd:ivreghdfe}，保留默认会删除的单例观测；这适合与显式虚拟变量的 {cmd:regress}/{cmd:xi:reg} 对齐，但可能使稳健标准误的显著性偏乐观，应按论文估计口径谨慎使用。{p_end}
 
 {phang}{bf:内生性检验：}主模型可运行 2SLS-IV；填写 {opt endog()}、{opt instruments()} 后，内生性结果会同时保存每个内生变量的 IV 第一阶段、IV 第二阶段（2SLS）和排除工具变量联合 F 值，{opt ivcluster()} 可指定不同于基准的 IV 聚类变量。填写 {opt psmweight()} 时追加 PSM 加权结果；填写 {opt heckmansel()} 时同时报告 Heckman 第一阶段选择方程和第二阶段结果方程，并保留逆米尔斯比率。{opt ovbtest} 按完整模型、无控制无固定效应、仅固定效应和个体固定效应运行多规格遗漏变量偏误敏感性检验，并在表中报告 OVB F 值。“更多选项”提供 PSM、Heckman、动态 GMM 和 DML。内生性 RTF 将不同阶段按并列规格写入同一文件；阶段的被解释变量不同，不应直接比较跨方程系数大小。高级方法失败时记录警告并保留其他结果。{p_end}
 
