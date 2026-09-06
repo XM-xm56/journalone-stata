@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.21 06sep2026}{...}
+{* *! version 0.9.22 06sep2026}{...}
 {vieweralsosee "JournalOne authorization" "help journalone_license"}{...}
 {vieweralsosee "JournalOne one-click update" "help journalone_update"}{...}
 {vieweralsosee "JournalOne preprocessing" "help journalone_prep"}{...}
@@ -253,7 +253,7 @@
 
 {phang}{bf:RTF.} 可直接用 Word 打开。所有分析模块统一使用 A4 纵向页面、四边 720 twips、Times New Roman、标题 12 磅、正文 9 磅、1.5 倍行距、普通段落和制表位生成标准三线表；多规格表超过单页四列时在同一文件中自动续表，稳健性续表重复基准模型。文件不创建 Word 表格对象，因此即使开启“查看网格线”，也只显示表顶线、表头分隔线和表底线。中文按标准 RTF Unicode 写入；左列始终使用 Stata 原始变量名，不读取变量标签，也不做翻译。多组基准回归按 `(1)`—`(4)` 横向合并，缺少的系数留空，核心变量和控制变量在前、常数项在后，底部输出控制变量、时间固定效应、个体固定效应、N 和 Adjusted R-squared。稳健性、内生性、机制与异质性只要形成回归表，也按各列实际估计规格输出这三项设计行，不用基准模型设定替代高级规格的真实设定。描述性统计按 {cmd:variable_order}，回归结果按 {cmd:specification_order}、{cmd:term_order} 输出。CSV 仍保留 {cmd:variable_label} 作为元数据。{p_end}
 
-{pstd}每个 RTF 表格下方自动追加多段带编号的结果解释，并在末尾给出加粗的“综合判断”，不使用“结果解读”“合理性检查”等程序化小标题。描述性统计保留中文表题、表注和分段解释，仅将统计指标列名输出为英文（{cmd:Variable}、{cmd:N}、{cmd:Mean}、{cmd:SD}、{cmd:Min}、{cmd:Max}）；变量名仍保持 Stata 原始名称。回归表和诊断表只突出核心系数、P 值、方向、显著性、跨规格稳定性及关键诊断风险；基准、稳健性、内生性、机制、异质性和显著组合会根据实际规格使用相应的中文解释。自动文字只读取本次实际结果，不修改数据、模型或显著性，也不会把不显著结果解释为显著。{p_end}
+{pstd}每个 RTF 表格下方自动追加一段基于当前表实际数值的结果说明，按“结果解读—发现的问题—可能影响—处理建议”顺序组织；没有触发的问题不重复堆砌通用定义。描述性统计保留中文表题和表注，仅将统计指标列名输出为英文（{cmd:Variable}、{cmd:N}、{cmd:Mean}、{cmd:SD}、{cmd:Min}、{cmd:Max}）；变量名仍保持 Stata 原始名称。回归表和诊断表报告表内系数、P 值、N、拟合优度、相关系数、VIF及第一阶段统计量，并针对实际发现给出影响和处理建议。自动文字只读取本次实际结果，不修改数据、模型或显著性，也不会把不显著结果解释为显著。{p_end}
 
 {phang}{bf:DO.} 采用人工编写的论文实证脚本风格，首行直接进入数据导入，不写插件名称、版本、运行编号、安装命令或插件专用导出命令。脚本集中定义 {cmd:$controls}，逐条写出 {cmd:tabstat}、{cmd:regress}/{cmd:reghdfe}/{cmd:xtreg}/{cmd:ivregress} 等命令，以 {cmd:est store m1}—{cmd:m4} 保存模型，并用一次 {cmd:esttab m1 ... m4} 横向生成同名 RTF 和 CSV；这些扩展命令按已安装处理。{p_end}
 
