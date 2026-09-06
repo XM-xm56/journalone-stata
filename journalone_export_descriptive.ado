@@ -1,4 +1,4 @@
-*! version 0.7.0 15aug2026
+*! version 0.9.20 06sep2026
 
 capture program drop journalone_export_descriptive
 program define journalone_export_descriptive, rclass
@@ -20,8 +20,14 @@ program define journalone_export_descriptive, rclass
         double N_total N_nonmissing N_missing mean sd min max           ///
         using `descriptive_data', replace
 
+    local unique_varlist ""
+    foreach candidate of local varlist {
+        if !strpos(" `unique_varlist' ", " `candidate' ") {
+            local unique_varlist "`unique_varlist' `candidate'"
+        }
+    }
     local order = 0
-    foreach variable of local varlist {
+    foreach variable of local unique_varlist {
         local ++order
         quietly summarize `variable' if `sample'
         local nonmissing = r(N)

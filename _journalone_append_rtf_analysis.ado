@@ -1,4 +1,4 @@
-*! version 0.9.19 05sep2026
+*! version 0.9.20 06sep2026
 
 capture program drop _journalone_append_rtf_analysis
 program define _journalone_append_rtf_analysis
@@ -34,8 +34,13 @@ program define _journalone_append_rtf_analysis
         local invalid_count = 0
         local zero_sd_count = 0
         local zero_sd_names ""
+        local duplicate_count = 0
+        local duplicate_names ""
+        local extreme_count = 0
+        local extreme_names ""
         local max_missing_rate = .
         local max_missing_variable ""
+        local max_missing_count = 0
 
         forvalues row = 1/`=_N' {
             if missing(N_nonmissing[`row']) | N_nonmissing[`row'] <= 0 {
@@ -52,6 +57,22 @@ program define _journalone_append_rtf_analysis
             if !missing(sd[`row']) & sd[`row'] == 0 {
                 local ++zero_sd_count
                 if `zero_sd_count' <= 5 local zero_sd_names "`zero_sd_names' `=variable[`row']'"
+            }
+
+            * A repeated variable row is an output/data construction error, not
+            * a substantive finding.  Keep the first occurrence in the list so
+            * the explanation names the duplicated variables only once.
+            local this_variable = variable[`row']
+            local prior_duplicate = 0
+            if `row' > 1 {
+                forvalues prior = 1/`=`row'-1' {
+                    if variable[`prior'] == "`this_variable'" local prior_duplicate = 1
+                }
+            }
+            if `prior_duplicate' {
+                local ++duplicate_count
+                if !strpos(" `duplicate_names' ", " `this_variable' ") & ///
+                    wordcount("`duplicate_names'") < 6 local duplicate_names "`duplicate_names' `this_variable'"
             }
 
             if `has_total' {
@@ -73,43 +94,112 @@ program define _journalone_append_rtf_analysis
                     if missing(`max_missing_rate') | `this_missing_rate' > `max_missing_rate' {
                         local max_missing_rate = `this_missing_rate'
                         local max_missing_variable = variable[`row']
+                        local max_missing_count = `this_missing'
                     }
+                }
+            }
+
+            * Flag only observations whose extrema are several SDs from the
+            * mean.  This is deliberately worded as a potential issue: a
+            * legitimate skewed variable can also meet this screen.
+            if !missing(mean[`row']) & !missing(sd[`row']) & sd[`row'] > 0 & ///
+                !missing(min[`row']) & !missing(max[`row']) {
+                local max_z = (max[`row']-mean[`row'])/sd[`row']
+                local min_z = (mean[`row']-min[`row'])/sd[`row']
+                if `max_z' >= 5 | `min_z' >= 5 {
+                    local ++extreme_count
+                    if !strpos(" `extreme_names' ", " `this_variable' ") & ///
+                        wordcount("`extreme_names'") < 6 local extreme_names "`extreme_names' `this_variable'"
                 }
             }
         }
         local zero_sd_names = strtrim("`zero_sd_names'")
+        local duplicate_names = strtrim("`duplicate_names'")
+        local extreme_names = strtrim("`extreme_names'")
 
         local sample_detail "结果表明，本表报告`variable_count'个变量，非缺失观测数介于`n_min_display'至`n_max_display'。"
         if `total_slots' > 0 {
             local missing_rate = 100*`total_missing'/`total_slots'
-            local missing_display = strtrim(string(`missing_rate', "%9.1f"))
-            local max_missing_display = strtrim(string(`max_missing_rate', "%9.1f"))
-            local missing_assessment "整体缺失较少"
-            if `missing_rate' > 5 & `missing_rate' <= 20 local missing_assessment "存在一定缺失"
-            if `missing_rate' > 20 local missing_assessment "缺失比例较高"
-            local missing_detail "总体缺失比例为`missing_display'%（`missing_assessment'），其中`max_missing_variable'的缺失比例最高，为`max_missing_display'%。"
+            local missing_display = strtrim(string(`missing_rate', "%9.3f"))
+            local max_missing_display = strtrim(string(`max_missing_rate', "%9.3f"))
+            local missing_detail "总体缺失`total_missing'个观测，占变量-样本单元的`missing_display'%；`max_missing_variable'缺失`max_missing_count'个（`max_missing_display'），为表内最高。"
         }
-        else local missing_detail "当前表未提供统一总样本量，因此不能直接计算总体缺失比例。"
+        else local missing_detail "表中没有统一总样本量，无法从当前表核对缺失规模；请先补充每个变量的总样本数。"
 
-        local variation_detail "主要统计量未见明显数值异常；极值是否合理仍需结合变量定义和单位判断。"
+        local variation_detail ""
         if `zero_sd_count' > 0 {
-            local zero_sd_summary "变量`zero_sd_names'的标准差为0，在当前样本中没有变化，进入回归前应复核。"
+            local zero_sd_summary "`zero_sd_names'的标准差为0，当前样本没有可识别的变异"
             if `zero_sd_count' > 5 local zero_sd_summary "共有`zero_sd_count'个变量的标准差为0，包括`zero_sd_names'等，在当前样本中没有变化，进入回归前应复核。"
-            local variation_detail "`zero_sd_summary'其余均值、标准差和极值仍需结合变量定义判断。"
+            else local variation_detail "`zero_sd_summary'"
+        }
+        if `extreme_count' > 0 {
+            local extreme_detail "`extreme_names'的最大值或最小值距均值至少5个标准差，存在潜在极端值"
+            if "`variation_detail'" == "" local variation_detail "`extreme_detail'"
+            else local variation_detail "`variation_detail'；`extreme_detail'"
+        }
+        if "`variation_detail'" == "" {
+            local variation_detail "按均值、标准差与极值的基本关系未发现可直接确认的异常。"
         }
 
-        local paragraph1 "说明：描述性统计是对数据进行整体概览，重点查看各变量的样本量、均值、标准差、最小值和最大值。结果：`sample_detail'"
-        local paragraph2 "缺失值检查：`missing_detail'判断标准：缺失比例越高，可用于分析的有效信息越少；如果缺失比例较高，应先说明删除、填补或保留缺失值的处理规则。建议：缺失处理方式应与研究设计保持一致，不能只根据非缺失样本量直接判断样本代表性。"
-        local paragraph3 "取值范围检查：`variation_detail'判断标准：均值应位于最小值和最大值之间，标准差不能为负；极值是否合理仍需结合变量定义和计量单位判断。建议：发现没有变化或极值明显异常的变量时，应先回到原始数据核对。"
-        if `invalid_count' == 0 {
-            local paragraph4 "数据质量检查：未发现样本量为负、均值超出极值范围或标准差为负等明显数值错误。判断：当前统计表在基本数值关系上通过检查。"
+        local paragraph1 "结果解读：`sample_detail'"
+        local paragraph2 "发现的问题：`missing_detail'"
+        local paragraph3 "可能影响："
+        if `total_slots' > 0 & `total_missing' > 0 local paragraph3 "可能影响：缺失会使不同变量进入回归的有效样本不同，若缺失不是随机的，系数可能产生样本选择偏差；请在回归表中核对各列N。"
+        else if `total_slots' > 0 local paragraph3 "可能影响：当前表没有缺失观测，未因缺失触发样本变化预警。"
+        local desc_issues ""
+        local desc_impacts ""
+        local desc_recommendations ""
+        if `duplicate_count' > 0 {
+            local desc_issues "变量`duplicate_names'重复出现`duplicate_count'行，属于重复选择或重复输出"
+            local desc_impacts "重复行会夸大变量数量并造成后续结果的对应关系混乱"
+            local desc_recommendations "删除变量选择列表中的重复项，并在生成CSV前按首次出现顺序去重"
         }
-        else local paragraph4 "数据质量检查：发现`invalid_count'处样本量、缺失数或取值范围关系需要核对。判断：当前统计表尚未完全通过基本数值检查。建议：在回归前回到原始数据复查这些记录。"
-        local paragraph5 "如何解读：均值和标准差描述的是样本内分布，最小值和最大值用于发现极端取值；这些统计量只能概括数据，不能单独说明变量之间的因果关系，也不能替代异常值、缩尾或变换处理的敏感性分析。"
-        local paragraph6 "下一步建议：结合变量单位、测量口径、样本筛选和缺失处理规则解释结果；如果变量没有足够变异或极值明显异常，应先完成数据核验，再进入后续模型。"
-
-        local summary_text "重点结果为：`sample_detail'`missing_detail'`variation_detail'"
-        if `invalid_count' > 0 local summary_text "`summary_text'另有`invalid_count'处数据质量关系需要复核。"
+        if `zero_sd_count' > 0 {
+            local zero_issue "`zero_sd_names'的标准差为0，当前样本没有可识别的变异"
+            if "`desc_issues'" == "" local desc_issues "`zero_issue'"
+            else local desc_issues "`desc_issues'；`zero_issue'"
+            local zero_impact "无变异变量无法识别斜率，可能在回归中被省略或引发共线性"
+            if "`desc_impacts'" == "" local desc_impacts "`zero_impact'"
+            else local desc_impacts "`desc_impacts'；`zero_impact'"
+            local zero_recommendation "核对变量是否误读、编码错误或被样本筛选固定；确认无误后从回归式移除"
+            if "`desc_recommendations'" == "" local desc_recommendations "`zero_recommendation'"
+            else local desc_recommendations "`desc_recommendations'；`zero_recommendation'"
+        }
+        if `extreme_count' > 0 {
+            local extreme_issue "`extreme_names'的最大值或最小值距均值至少5个标准差，存在潜在极端值"
+            if "`desc_issues'" == "" local desc_issues "`extreme_issue'"
+            else local desc_issues "`desc_issues'；`extreme_issue'"
+            local extreme_impact "潜在极端值可能拉动均值、标准差和回归系数，影响显著性；仅凭本表不能断定这些值是错误"
+            if "`desc_impacts'" == "" local desc_impacts "`extreme_impact'"
+            else local desc_impacts "`desc_impacts'；`extreme_impact'"
+            local extreme_recommendation "回查原始记录、单位和录入口径，再看分位数/箱线图；确认异常后按预先规则缩尾或变换，并报告处理前后的稳健性结果"
+            if "`desc_recommendations'" == "" local desc_recommendations "`extreme_recommendation'"
+            else local desc_recommendations "`desc_recommendations'；`extreme_recommendation'"
+        }
+        if `invalid_count' > 0 {
+            local invalid_issue "另有`invalid_count'处样本量、缺失数或取值范围关系异常"
+            if "`desc_issues'" == "" local desc_issues "`invalid_issue'"
+            else local desc_issues "`desc_issues'；`invalid_issue'"
+            local invalid_recommendation "先回到原始数据核对异常记录，再运行后续模型"
+            if "`desc_recommendations'" == "" local desc_recommendations "`invalid_recommendation'"
+            else local desc_recommendations "`desc_recommendations'；`invalid_recommendation'"
+        }
+        if "`desc_issues'" == "" {
+            local paragraph4 "发现的问题：按当前表的样本量、均值、标准差和极值关系，未发现重复行、无变异变量或潜在极端值预警。"
+            local paragraph5 "可能影响：当前表不能排除变量定义、缺失机制或未显示分位数方面的问题。"
+            local paragraph6 "处理建议：继续核对变量单位和原始数据，并在回归结果中比较各列有效样本量。"
+        }
+        else {
+            local paragraph4 "发现的问题：`desc_issues'。"
+            local paragraph5 "可能影响：`desc_impacts'。"
+            local paragraph6 "处理建议：`desc_recommendations'。"
+        }
+        if `invalid_count' > 0 local paragraph6 "`paragraph6'另有`invalid_count'处统计量关系异常，先核对原始数据后再估计。"
+        local summary_text "综合结论：`missing_detail'"
+        if `duplicate_count' > 0 local summary_text "`summary_text'发现重复变量`duplicate_names'，应先去重。"
+        if `extreme_count' > 0 local summary_text "`summary_text'`extreme_names'存在潜在极端值，需核验后决定是否处理。"
+        if `zero_sd_count' > 0 local summary_text "`summary_text'`zero_sd_names'无变异，进入回归前应复核。"
+        if `invalid_count' > 0 local summary_text "`summary_text'另有`invalid_count'处数值关系异常。"
     }
 
     if inlist("`type'", "regression", "baseline") {
@@ -214,32 +304,12 @@ program define _journalone_append_rtf_analysis
             local focus_details "`focus_details'；其余`remaining_focus'个规格的主要系数见表中对应结果"
         }
 
-        local module_intro "回归分析用于考察解释变量与被解释变量在既定模型中的条件相关关系。"
-        if "`type'" == "baseline" {
-            local module_intro "基准回归用于考察核心解释变量与被解释变量在既定模型中的关系。表中各列依次对应界面中的模型1至模型6，控制变量、固定效应、样本和标准误设置以实际填写内容为准，而不是自动假定后一列一定比前一列增加控制变量。"
-        }
-        else if strpos("`title'", "稳健") {
-            local module_intro "稳健性检验用于观察核心结论在替换变量、调整样本、改变固定效应或标准误等预先设定的替代规格下是否保持稳定。"
-        }
-        else if strpos("`title'", "内生") {
-            local module_intro "内生性检验用于评估反向因果、遗漏变量或样本选择等问题是否可能影响基准结论；不同方法对应不同识别假设，不能仅凭系数显著就认定内生性已经解决。"
-        }
-        else if strpos("`title'", "机制") {
-            local module_intro "机制检验用于考察核心解释变量影响被解释变量的可能路径。中介、调节或分步回归首先反映变量之间的条件关联，只有在相应识别假设成立时才能进一步作因果机制解释。"
-        }
-        else if strpos("`title'", "异质") {
-            local module_intro "异质性分析用于比较核心关系在不同样本组或不同条件下是否存在差别。单独一组显著、另一组不显著并不等于两组系数显著不同，仍应结合正式的组间系数检验。"
-        }
-        else if strpos("`title'", "显著组合") {
-            local module_intro "规格组合结果用于比较预先登记的不同模型设定，而不是从大量模型中只保留显著结果；显著和不显著规格都应共同报告。"
-        }
-        local paragraph1 "说明：`module_intro'本表共报告`specification_count'个估计规格，并以每个规格中排序最靠前的非常数项作为主要关注项。"
-        if "`focus_details'" != "" local paragraph2 "结果：`focus_details'。"
-
-        local paragraph3 "显著性与方向解释：主要关注项中，分别有`sig1_count'个、`sig2_count'个和`sig3_count'个达到`p1_display'%、`p2_display'%和`p3_display'%显著性水平。判断标准：P值越小，样本对非零关系的统计证据越强；正系数表示在其他模型设定保持不变时两者呈正向条件关系，负系数表示负向条件关系。建议：统计显著只反映证据强弱，还应结合系数大小、变量单位和实际经济意义判断，不能只看星号。"
-
         local invalid_count = 0
         local zero_se_count = 0
+        local missing_focus_count = `specification_count' - `focus_count'
+        local missing_p_count = 0
+        local coefficient_min = .
+        local coefficient_max = .
         local fit_min = .
         local fit_max = .
         local fit_count = 0
@@ -276,13 +346,36 @@ program define _journalone_append_rtf_analysis
             }
         }
 
+        * Count missing P values only for the automatically selected focal
+        * coefficient in each specification.  A missing P value is a report
+        * problem because the stars and the significance comparison cannot be
+        * reproduced from the table.
+        foreach this_specification of local specifications {
+            local p_focus_row = 0
+            local p_focus_order = .
+            forvalues row = 1/`=_N' {
+                if specification[`row'] == "`this_specification'" & ///
+                    term[`row'] != "_cons" & !missing(estimate[`row']) {
+                    if missing(`p_focus_order') | term_order[`row'] < `p_focus_order' {
+                        local p_focus_order = term_order[`row']
+                        local p_focus_row = `row'
+                    }
+                }
+            }
+            if `p_focus_row' > 0 & missing(p_value[`p_focus_row']) local ++missing_p_count
+        }
+
         quietly summarize N if N < ., meanonly
+        local n_observed = r(N)
         local n_min = r(min)
         local n_max = r(max)
-        local n_min_display = strtrim(string(`n_min', "%12.0f"))
-        local n_max_display = strtrim(string(`n_max', "%12.0f"))
-        local sample_note "各规格使用相同样本量，为`n_min_display'"
-        if `n_min' != `n_max' local sample_note "各规格样本量介于`n_min_display'至`n_max_display'，跨模型比较时应注意样本变化"
+        local sample_note "表中没有可用的规格样本量N，无法核对跨模型样本是否一致"
+        if `n_observed' > 0 {
+            local n_min_display = strtrim(string(`n_min', "%12.0f"))
+            local n_max_display = strtrim(string(`n_max', "%12.0f"))
+            local sample_note "各规格使用相同样本量，为`n_min_display'"
+            if `n_min' != `n_max' local sample_note "各规格样本量介于`n_min_display'至`n_max_display'，跨模型比较存在样本变化"
+        }
 
         local stability_note "只有一个可识别的主要系数，暂不能判断跨规格稳定性"
         if `focus_count' > 1 & (`positive_count' == `focus_count' | ///
@@ -298,56 +391,92 @@ program define _journalone_append_rtf_analysis
         if `fit_count' > 0 {
             local fit_min_display = strtrim(string(`fit_min', "%21.`decimals'f"))
             local fit_max_display = strtrim(string(`fit_max', "%21.`decimals'f"))
-            local fit_note "；表中可用拟合优度介于`fit_min_display'至`fit_max_display'，它反映样本内拟合程度，但不能单独证明模型设定正确"
+            local fit_note "；表中拟合优度介于`fit_min_display'至`fit_max_display'"
         }
-        local paragraph4 "稳定性检查：`sample_note'；`stability_note'`fit_note'。判断标准：跨规格的核心系数方向、显著性和样本量越一致，结论越稳定；如果方向或显著性发生变化，应认为结果可能对模型或样本设定敏感。建议：跨模型比较时同时核对控制变量、固定效应、标准误和样本是否发生变化。"
+        local paragraph1 "结果解读：本表报告`specification_count'个估计规格。"
+        if "`focus_details'" != "" local paragraph1 "`paragraph1'主要关注项的表内系数为：`focus_details'。"
+        else local paragraph1 "`paragraph1'表中没有可识别的非常数系数。"
 
-        if `invalid_count' == 0 {
-            local paragraph5 "数值质量检查：表内未发现标准误为负、P值超出0至1、样本量非正、置信区间上下限倒置或拟合优度大于1等明显数值错误。判断：表内报告的基本统计口径自洽。"
+        local issue_text ""
+        if `missing_focus_count' > 0 local issue_text "有`missing_focus_count'个规格没有可比较的主要系数"
+        if `positive_count' > 0 & `negative_count' > 0 {
+            if "`issue_text'" == "" local issue_text "主要系数在规格间变号"
+            else local issue_text "`issue_text'；主要系数在规格间变号"
         }
-        else local paragraph5 "数值质量检查：表内发现`invalid_count'处需要复核的数值异常，可能涉及标准误、P值、样本量、置信区间或拟合优度。建议：在形成论文结论前核对估计命令和原始结果。"
-        if `zero_se_count' > 0 local paragraph5 "`paragraph5'另有`zero_se_count'个系数的标准误为0，建议检查参考组、完全共线、被省略项或参数可识别性。"
-
-        local paragraph6 "下一步建议：系数方向和显著性只有在变量构造、样本选择、固定效应、标准误设定和识别假设合理时才具有可信解释；如果研究设计不能排除内生性，应使用相关关系表述，不直接写成促进、抑制或导致。"
-        if strpos("`title'", "稳健") local paragraph6 "下一步建议：稳健性检验只能说明结论对表中已经实施的替代设定是否敏感，不能覆盖所有可能的模型错误；如方向或显著性变化较大，说明结论对替代设定较敏感，应如实报告并解释变化来源。"
-        if strpos("`title'", "内生") local paragraph6 "下一步建议：工具变量、PSM、Heckman、动态GMM和DML分别依赖不同假设；系数显著不能替代工具变量相关性与排除限制、共同支撑、选择方程或正交化条件的检验和论证。"
-        if strpos("`title'", "机制") local paragraph6 "下一步建议：机制成立通常需要理论路径和相应方程共同支持；中介变量显著或交互项显著本身不自动证明因果机制，应避免把关联路径写成已经证实的传导机制。"
-        if strpos("`title'", "异质") local paragraph6 "下一步建议：解释异质性时应同时报告各组样本量、置信区间和正式组间差异检验，避免仅依据一组有星、另一组无星就认定存在显著差异。"
-        if strpos("`title'", "显著组合") local paragraph6 "下一步建议：规格数量越多，多重检验和选择性报告风险越高；应保留全部预先允许的规格，并把该表作为敏感性诊断而不是寻找显著模型的工具。"
-
-        if "`focus_details'" != "" {
-            local summary_text "重点结果为：`focus_details'。总体看，`stability_note'；`sample_note'。"
+        if `focus_count' > 1 & `sig3_count' < `focus_count' {
+            if "`issue_text'" == "" local issue_text "主要系数的10%显著性未在所有规格保持"
+            else local issue_text "`issue_text'；主要系数的10%显著性未在所有规格保持"
         }
-        else {
-            local summary_text "本表共报告`specification_count'个规格，但未识别到可自动解读的非常数核心系数。"
+        if `n_observed' == 0 | (`n_observed' > 1 & `n_min' != `n_max') {
+            if "`issue_text'" == "" local issue_text "规格样本量无法统一核对或发生变化"
+            else local issue_text "`issue_text'；`sample_note'"
         }
-        if `invalid_count' > 0 {
-            local summary_text "`summary_text'另有`invalid_count'处数值异常需要复核。"
+        if `missing_p_count' > 0 {
+            if "`issue_text'" == "" local issue_text "有`missing_p_count'个主要系数缺少P值"
+            else local issue_text "`issue_text'；有`missing_p_count'个主要系数缺少P值"
         }
         if `zero_se_count' > 0 {
-            local summary_text "`summary_text'其中`zero_se_count'个系数的标准误为0，应检查共线性、省略项或可识别性。"
+            if "`issue_text'" == "" local issue_text "有`zero_se_count'个非缺失系数的标准误为0"
+            else local issue_text "`issue_text'；有`zero_se_count'个非缺失系数的标准误为0"
         }
-        local concise_caveat "系数首先表示条件相关，因果解释仍取决于研究设计与识别假设。"
-        if strpos("`title'", "稳健") local concise_caveat "若核心系数的方向或显著性发生变化，说明结论对替代设定较敏感。"
-        if strpos("`title'", "内生") local concise_caveat "是否缓解内生性仍需结合所用方法的识别假设和诊断检验判断。"
-        if strpos("`title'", "机制") local concise_caveat "路径显著只提供机制证据，不能单独证明因果传导机制成立。"
-        if strpos("`title'", "异质") local concise_caveat "组间差异应以正式系数检验判断，不能只比较两组是否带星。"
-        if strpos("`title'", "显著组合") local concise_caveat "应保留全部预设规格，避免只报告显著结果。"
-        local summary_text "`summary_text'`concise_caveat'"
-        if inlist("`type'", "baseline", "regression") {
-            local design_note "表中的控制变量、时间固定效应和个体固定效应行按各列实际估计设定报告；‘是’仅表示该项进入估计式，不自动等于识别假设成立。"
-            local summary_text "`summary_text'`design_note'"
+        if `invalid_count' > 0 {
+            if "`issue_text'" == "" local issue_text "表内有`invalid_count'处统计量关系异常"
+            else local issue_text "`issue_text'；表内有`invalid_count'处统计量关系异常"
         }
-        if strpos("`title'", "稳健") {
-            local robustness_note "比较稳健性时应同时观察核心系数的方向、显著性、样本量和调整后R²；若只替换变量、滞后期、样本或固定效应而结论仍稳定，才可表述为对这些已实施替代设定不敏感。"
-            local summary_text "`summary_text'`robustness_note'"
+        if "`issue_text'" == "" local paragraph2 "发现的问题：按当前表的系数、P值、标准误和N，未发现可直接识别的明显异常。"
+        else local paragraph2 "发现的问题：`issue_text'。"
+
+        local impact_text ""
+        if `positive_count' > 0 & `negative_count' > 0 local impact_text "变号会使方向性结论依赖具体规格，不能把所有列概括为同一方向"
+        if `focus_count' > 1 & `sig3_count' < `focus_count' {
+            if "`impact_text'" == "" local impact_text "显著性变化意味着统计证据对设定较敏感"
+            else local impact_text "`impact_text'；显著性变化意味着统计证据对设定较敏感"
         }
-        * Append the multi-equation explanation after the main summary is
-        * assembled; adding it earlier would be overwritten by focus_details.
-        if strpos("`title'", "内生") & (`iv_stage_count' | `heckman_stage_count') {
-            local stage_note "本表把多阶段估计按方程分别列出：IV第一阶段报告内生变量对工具变量的回归及排除工具变量联合F值，IV第二阶段报告结构方程；Heckman第一阶段为选择方程Probit，第二阶段为结果方程并保留逆米尔斯比率。第一阶段与第二阶段的被解释变量不同，不能将两列系数直接作大小比较。"
-            local summary_text "`summary_text'`stage_note'"
+        if `n_observed' > 1 & `n_min' != `n_max' {
+            if "`impact_text'" == "" local impact_text "样本变化会把模型设定差异与样本差异混在一起"
+            else local impact_text "`impact_text'；样本变化会把模型设定差异与样本差异混在一起"
         }
+        if `missing_p_count' > 0 {
+            if "`impact_text'" == "" local impact_text "缺少P值时无法复核显著性判断"
+            else local impact_text "`impact_text'；缺少P值时无法复核显著性判断"
+        }
+        if `zero_se_count' > 0 {
+            if "`impact_text'" == "" local impact_text "零标准误可能来自完全共线、被省略项或不可识别参数"
+            else local impact_text "`impact_text'；零标准误可能来自完全共线、被省略项或不可识别参数"
+        }
+        if `invalid_count' > 0 {
+            if "`impact_text'" == "" local impact_text "数值关系异常会使表中结论无法复现"
+            else local impact_text "`impact_text'；数值关系异常会使表中结论无法复现"
+        }
+        if "`impact_text'" == "" local paragraph3 "可能影响：当前表未触发上述风险；仍应结合变量单位和研究设计解释系数。"
+        else local paragraph3 "可能影响：`impact_text'。"
+
+        local recommendation_text ""
+        if `positive_count' > 0 & `negative_count' > 0 local recommendation_text "逐列核对控制变量、固定效应、样本和标准误，先解释变号来源，再决定哪一规格对应研究设计"
+        if `focus_count' > 1 & `sig3_count' < `focus_count' {
+            if "`recommendation_text'" == "" local recommendation_text "报告各列系数和置信区间，不要只保留显著列"
+            else local recommendation_text "`recommendation_text'；报告各列系数和置信区间，不要只保留显著列"
+        }
+        if `n_observed' > 1 & `n_min' != `n_max' {
+            if "`recommendation_text'" == "" local recommendation_text "用相同估计样本重跑一组对照规格，区分样本变化与模型变化"
+            else local recommendation_text "`recommendation_text'；用相同估计样本重跑一组对照规格，区分样本变化与模型变化"
+        }
+        if `missing_p_count' > 0 local recommendation_text "`recommendation_text'补齐P值或由系数/标准误重新计算显著性；"
+        if `zero_se_count' > 0 local recommendation_text "`recommendation_text'检查完全共线、参考组和被省略项；"
+        if `invalid_count' > 0 local recommendation_text "`recommendation_text'回到原始估计命令核对异常行；"
+        if "`recommendation_text'" == "" local recommendation_text "保留当前全部规格，并结合变量单位、置信区间和实际效应大小报告结果。"
+        else local recommendation_text "`recommendation_text'"
+        local paragraph4 "处理建议：`recommendation_text'"
+
+        local paragraph5 "规格概况：`sample_note'`fit_note'。"
+        local paragraph6 "结论："
+        if "`issue_text'" == "" local paragraph6 "结论：当前表的主要系数方向和统计量没有触发自动风险提示，可以继续结合理论和识别设计写结果。"
+        else local paragraph6 "结论：当前表存在上述可定位的结果风险，修正或解释前不宜把结论写成对所有规格都成立。"
+        if strpos("`title'", "异质") local paragraph6 "`paragraph6'异质性还需报告正式组间系数检验，不能只比较两组星号。"
+        if strpos("`title'", "机制") local paragraph6 "`paragraph6'机制路径应按各方程的实际系数和识别假设表述，不把单个显著中介项直接写成已证实因果机制。"
+        if strpos("`title'", "内生") & (`iv_stage_count' | `heckman_stage_count') local paragraph6 "`paragraph6'多阶段结果应分别核对第一阶段/选择方程与结构方程，不能直接比较不同被解释变量的系数大小。"
+
+        local summary_text "综合结论：`paragraph2'`paragraph3'`paragraph4'"
     }
 
     if "`type'" == "diagnostics" {
@@ -442,90 +571,100 @@ program define _journalone_append_rtf_analysis
             if !missing(N[`row']) & N[`row'] <= 0 local ++invalid_count
         }
 
-        if `corr_rows' > 0 {
-            if !missing(`max_corr_abs') {
-                local max_corr_display = strtrim(string(`max_corr_value', "%21.`decimals'f"))
-                local corr_share_text ""
-                if `corr_pairs' > 0 {
-                    local low_corr_share = 100*`low_corr'/`corr_pairs'
-                    local low_corr_share_display = strtrim(string(`low_corr_share', "%9.1f"))
-                    local corr_share_text "，其中`low_corr_share_display'%的变量对低于0.8"
-                }
-                local corr_assessment "未发现达到0.8的变量对，初步未见明显相关性预警"
-                if `high_corr' > 0 local corr_assessment "有`high_corr'组变量对达到0.8，存在相关性预警"
-                local paragraph1 "说明：相关性分析用于观察变量之间的两两线性关系。结果：除变量与自身的相关系数外，绝对值最大的相关系数为`max_corr_display'，出现在`max_corr_var1'与`max_corr_var2'之间；共比较`corr_pairs'组变量对，其中`corr_assessment'`corr_share_text'。判断标准：表中星号对应双侧检验的`p3_display'%、`p2_display'%和`p1_display'%显著性水平，|r|越接近1表示线性关系越强，经验上重点关注|r|达到0.8的变量对。建议：相关显著只能说明线性关系，不代表因果关系；如果|r|较高，应在回归中进一步检查共线性。"
-            }
-            else local paragraph1 "说明：相关性分析用于观察变量之间的两两线性关系。结果：相关性表未包含可比较的非对角变量对，因此暂不能判断变量之间的两两线性关系。建议：补充有效的变量对和样本量后再作判断。"
+        local max_vif_display "未报告"
+        if !missing(`max_vif') local max_vif_display = strtrim(string(`max_vif', "%21.`decimals'f"))
+        local mean_vif_text ""
+        if !missing(`mean_vif') {
+            local mean_vif_display = strtrim(string(`mean_vif', "%21.`decimals'f"))
+            local mean_vif_text "，平均VIF为`mean_vif_display'"
         }
-
-        if `vif_rows' > 0 {
-            local max_vif_display "未报告"
-            if !missing(`max_vif') local max_vif_display = strtrim(string(`max_vif', "%21.`decimals'f"))
-            local mean_vif_text ""
-            if !missing(`mean_vif') {
-                local mean_vif_display = strtrim(string(`mean_vif', "%21.`decimals'f"))
-                local mean_vif_text "，平均VIF为`mean_vif_display'"
-            }
-            local paragraph2 "说明：多重共线性检验用于判断解释变量之间是否存在信息重复。结果：本表最大VIF为`max_vif_display'，对应变量`max_vif_variable'`mean_vif_text'；VIF不低于10的变量有`high_vif'个，介于5至10的变量有`moderate_vif'个。判断标准：通常将VIF小于5视为较低、5至10视为需要关注、达到10视为明显预警。建议：若VIF达到10，应检查变量定义、相关控制变量和模型设定，必要时考虑合并、删除或重新构造变量；VIF较低只能说明未触发经验预警，不能据此断言完全不存在共线性。"
-        }
-
-        if `panel_rows' > 0 & "`panel_text'" != "" {
-            local paragraph3 "说明：面板模型选择用于比较混合OLS、固定效应和随机效应的适用性。结果：`panel_text'。判断标准：各检验的原假设不同，通常以P<5%作为拒绝原假设的经验标准。建议：固定效应F检验、随机效应LM检验和Hausman检验应逐项解释，并结合个体异质性、研究目的和标准误设定选择模型，而不是只看某一个P值。"
-        }
-
+        local max_corr_display "未报告"
+        if !missing(`max_corr_abs') local max_corr_display = strtrim(string(`max_corr_value', "%21.`decimals'f"))
+        local iv_detail ""
         if `iv_rows' > 0 {
-            local iv_detail ""
             if !missing(`first_stage_partial_r2') {
                 local partial_display = strtrim(string(`first_stage_partial_r2', "%21.`decimals'f"))
                 local iv_detail "第一阶段部分R²为`partial_display'"
             }
             if !missing(`first_stage_f') {
                 local f_display = strtrim(string(`first_stage_f', "%21.`decimals'f"))
-                if "`iv_detail'" == "" local iv_detail "排除工具变量的第一阶段F为`f_display'"
-                else local iv_detail "`iv_detail'，排除工具变量的第一阶段F为`f_display'"
-                if `first_stage_f' < 10 local iv_detail "`iv_detail'，低于常用的10这一经验参考值，存在弱工具变量风险"
-                else local iv_detail "`iv_detail'，未低于常用的10这一经验参考值"
+                if "`iv_detail'" == "" local iv_detail "排除工具变量F为`f_display'"
+                else local iv_detail "`iv_detail'，排除工具变量F为`f_display'"
             }
-            if "`iv_detail'" == "" local iv_detail "当前表未报告可自动概括的第一阶段部分R²或F统计量"
-            local paragraph4 "说明：工具变量诊断用于检查工具变量与内生解释变量之间的第一阶段关联。结果：`iv_detail'。判断标准：第一阶段F统计量通常以10作为弱工具变量的经验参考值。建议：第一阶段较强只说明相关性证据，不能自动证明排除限制和工具变量外生性；恰好识别时也无法使用过度识别检验验证这些假设。"
+            if "`iv_detail'" == "" local iv_detail "表中没有可用的第一阶段F或部分R²"
         }
 
-        if `invalid_count' == 0 {
-            local paragraph5 "数值质量检查：表内未发现相关系数超出负1至1、P值超出0至1或样本量非正等明显数值错误，诊断结果在统计口径上基本自洽。判断：当前诊断表通过基本数值范围检查。"
-        }
-        else local paragraph5 "数值质量检查：表内发现`invalid_count'处需要复核的数值异常，可能涉及相关系数、P值或样本量。建议：先核对原始结果，再进行模型判断。"
-
-        local paragraph6 "下一步建议：这些诊断用于发现风险，而不是自动选择模型或删除变量。未触发0.8、VIF=10或第一阶段F=10等经验阈值，不代表模型设定、外生性或因果识别已经成立；最终判断仍需结合理论、变量定义和研究设计。"
-
-        local diagnostic_parts ""
-        if `corr_rows' > 0 {
-            if !missing(`max_corr_abs') {
-                local diagnostic_parts "相关性方面，`max_corr_var1'与`max_corr_var2'的相关系数绝对值最大，为`max_corr_display'，|r|达到0.8的变量对有`high_corr'组"
-            }
-        }
+        local diagnostic_results ""
+        if `corr_rows' > 0 & !missing(`max_corr_abs') local diagnostic_results "最大相关系数为`max_corr_display'（`max_corr_var1'与`max_corr_var2'）"
         if `vif_rows' > 0 {
-            local one_part "共线性方面，最大VIF为`max_vif_display'（`max_vif_variable'），VIF不低于10的变量有`high_vif'个"
-            if "`diagnostic_parts'" == "" local diagnostic_parts "`one_part'"
-            else local diagnostic_parts "`diagnostic_parts'；`one_part'"
+            local one_result "最大VIF为`max_vif_display'（`max_vif_variable'）`mean_vif_text'"
+            if "`diagnostic_results'" == "" local diagnostic_results "`one_result'"
+            else local diagnostic_results "`diagnostic_results'；`one_result'"
         }
         if `panel_rows' > 0 & "`panel_text'" != "" {
-            local one_part "面板模型检验显示：`panel_text'"
-            if "`diagnostic_parts'" == "" local diagnostic_parts "`one_part'"
-            else local diagnostic_parts "`diagnostic_parts'；`one_part'"
+            local one_result "面板检验：`panel_text'"
+            if "`diagnostic_results'" == "" local diagnostic_results "`one_result'"
+            else local diagnostic_results "`diagnostic_results'；`one_result'"
         }
         if `iv_rows' > 0 {
-            local one_part "工具变量诊断显示，`iv_detail'"
-            if "`diagnostic_parts'" == "" local diagnostic_parts "`one_part'"
-            else local diagnostic_parts "`diagnostic_parts'；`one_part'"
+            local one_result "工具变量诊断：`iv_detail'"
+            if "`diagnostic_results'" == "" local diagnostic_results "`one_result'"
+            else local diagnostic_results "`diagnostic_results'；`one_result'"
         }
-        if "`diagnostic_parts'" == "" {
-            local summary_text "当前诊断表没有可自动概括的有效统计量。"
+        if "`diagnostic_results'" == "" local diagnostic_results "当前表没有可用的相关性、VIF、面板或第一阶段统计量。"
+        local paragraph1 "结果解读：`diagnostic_results'。"
+
+        local diagnostic_issues ""
+        if `high_corr' > 0 local diagnostic_issues "有`high_corr'组变量对的|r|达到0.8"
+        if `high_vif' > 0 {
+            if "`diagnostic_issues'" == "" local diagnostic_issues "有`high_vif'个变量的VIF不低于10"
+            else local diagnostic_issues "`diagnostic_issues'；有`high_vif'个变量的VIF不低于10"
         }
-        else local summary_text "重点诊断为：`diagnostic_parts'。"
+        if `first_stage_f' < 10 & !missing(`first_stage_f') {
+            if "`diagnostic_issues'" == "" local diagnostic_issues "第一阶段F为`f_display'，存在弱工具变量风险"
+            else local diagnostic_issues "`diagnostic_issues'；第一阶段F为`f_display'，存在弱工具变量风险"
+        }
         if `invalid_count' > 0 {
-            local summary_text "`summary_text'另有`invalid_count'处数值异常需要复核。"
+            if "`diagnostic_issues'" == "" local diagnostic_issues "有`invalid_count'处相关系数、P值或N超出可解释范围"
+            else local diagnostic_issues "`diagnostic_issues'；有`invalid_count'处数值超出可解释范围"
         }
-        local summary_text "`summary_text'这些阈值仅用于风险提示，不能单独证明模型设定或因果识别成立。"
+        if "`diagnostic_issues'" == "" local paragraph2 "发现的问题：当前诊断表未触发高相关、高VIF、弱第一阶段或明显数值错误预警。"
+        else local paragraph2 "发现的问题：`diagnostic_issues'。"
+
+        local diagnostic_impacts ""
+        if `high_corr' > 0 local diagnostic_impacts "高相关变量可能重复携带信息，使回归系数和标准误不稳定"
+        if `high_vif' > 0 {
+            if "`diagnostic_impacts'" == "" local diagnostic_impacts "高VIF可能放大标准误，使单个系数难以显著"
+            else local diagnostic_impacts "`diagnostic_impacts'；高VIF可能放大标准误，使单个系数难以显著"
+        }
+        if `first_stage_f' < 10 & !missing(`first_stage_f') {
+            if "`diagnostic_impacts'" == "" local diagnostic_impacts "弱工具变量会使IV二阶段估计偏误并放大不确定性"
+            else local diagnostic_impacts "`diagnostic_impacts'；弱工具变量会使IV二阶段估计偏误并放大不确定性"
+        }
+        if `invalid_count' > 0 {
+            if "`diagnostic_impacts'" == "" local diagnostic_impacts "数值错误会使诊断结论无法复核"
+            else local diagnostic_impacts "`diagnostic_impacts'；数值错误会使诊断结论无法复核"
+        }
+        if "`diagnostic_impacts'" == "" local paragraph3 "可能影响：当前诊断值没有显示上述风险，但这不替代对变量定义和识别假设的核验。"
+        else local paragraph3 "可能影响：`diagnostic_impacts'。"
+
+        local diagnostic_recommendations ""
+        if `high_corr' > 0 local diagnostic_recommendations "核对高相关变量的定义，分别估计、合并或按理论保留其一，并比较系数变化"
+        if `high_vif' > 0 {
+            if "`diagnostic_recommendations'" == "" local diagnostic_recommendations "检查控制变量组合和固定效应，报告替代设定下的系数与标准误"
+            else local diagnostic_recommendations "`diagnostic_recommendations'；检查控制变量组合和固定效应，报告替代设定下的系数与标准误"
+        }
+        if `first_stage_f' < 10 & !missing(`first_stage_f') local diagnostic_recommendations "`diagnostic_recommendations'补充弱工具稳健推断或更换/增加工具变量，并论证排除限制；"
+        if `invalid_count' > 0 local diagnostic_recommendations "`diagnostic_recommendations'回到原始命令核对异常行后再作模型选择；"
+        if "`diagnostic_recommendations'" == "" local diagnostic_recommendations "保留当前诊断结果，结合研究设计核对模型选择和标准误设定。"
+        local paragraph4 "处理建议：`diagnostic_recommendations'"
+        local paragraph5 "数值核对："
+        if `invalid_count' == 0 local paragraph5 "数值核对：表内相关系数、P值和样本量没有触发范围错误。"
+        else local paragraph5 "数值核对：表内有`invalid_count'处统计量范围异常，必须先复核数据和估计命令。"
+        local paragraph6 "结论："
+        if "`diagnostic_issues'" == "" local paragraph6 "结论：当前诊断表未显示直接的共线性或工具变量强度风险，可以进入结合理论的模型判断。"
+        else local paragraph6 "结论：当前诊断表已经显示上述风险，相关模型结论应在处理或解释这些风险后再报告。"
+        local summary_text "综合结论：`paragraph2'`paragraph3'`paragraph4'"
     }
 
     * Write every generated explanation as its own numbered paragraph.  The

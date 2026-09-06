@@ -1,4 +1,4 @@
-*! version 0.9.7 17aug2026
+*! version 0.9.20 06sep2026
 
 capture program drop journalone_descriptive_only
 program define journalone_descriptive_only, rclass
@@ -30,8 +30,14 @@ program define journalone_descriptive_only, rclass
         double N_total N_nonmissing N_missing mean sd min max ///
         using `descriptive_data', replace
 
+    local descriptive_unique ""
+    foreach descriptive_candidate of local descvars {
+        if !strpos(" `descriptive_unique' ", " `descriptive_candidate' ") {
+            local descriptive_unique "`descriptive_unique' `descriptive_candidate'"
+        }
+    }
     local descriptive_count = 0
-    foreach descriptive_var of local descvars {
+    foreach descriptive_var of local descriptive_unique {
         local ++descriptive_count
         quietly summarize `descriptive_var' `descriptive_if'
         local descriptive_nonmissing = r(N)

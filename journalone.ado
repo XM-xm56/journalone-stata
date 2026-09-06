@@ -1,4 +1,4 @@
-*! version 0.9.19 05sep2026
+*! version 0.9.20 06sep2026
 capture program drop journalone
 program define journalone, eclass
     version 16.0
@@ -769,7 +769,16 @@ program define journalone, eclass
 
     * Publication-ready descriptive statistics for the frozen main estimation sample.
     if "`nodesc'" == "" {
-        local descriptive_use `"`descvars'"'
+        * Keep the user's order, but remove repeated variables before posting
+        * rows.  A repeated token should never create a second output row or
+        * make the descriptive table appear to contain more variables.
+        local descriptive_input `"`descvars'"'
+        local descriptive_use ""
+        foreach descriptive_candidate of local descriptive_input {
+            if !strpos(" `descriptive_use' ", " `descriptive_candidate' ") {
+                local descriptive_use "`descriptive_use' `descriptive_candidate'"
+            }
+        }
         if strtrim(`"`descriptive_use'"') == "" {
             local descriptive_candidates `"`depvar' `indepvars' `endog' `treat' `post' `controls' `instruments' `mediators' `moderators' `group'"'
             local descriptive_use ""
