@@ -1,4 +1,4 @@
-*! version 0.9.20 06sep2026
+*! version 0.9.21 06sep2026
 
 capture program drop _journalone_append_rtf_analysis
 program define _journalone_append_rtf_analysis
@@ -38,6 +38,8 @@ program define _journalone_append_rtf_analysis
         local duplicate_names ""
         local extreme_count = 0
         local extreme_names ""
+        local extreme_detail_names ""
+        local missing_detail_names ""
         local max_missing_rate = .
         local max_missing_variable ""
         local max_missing_count = 0
@@ -91,6 +93,12 @@ program define _journalone_append_rtf_analysis
                     }
                     local total_missing = `total_missing' + `this_missing'
                     local this_missing_rate = 100*`this_missing'/N_total[`row']
+                    if `this_missing' > 0 & ///
+                        !strpos(" `missing_detail_names' ", " `this_variable'=") {
+                        local missing_rate_detail = strtrim(string(`this_missing_rate', "%9.3f"))
+                        if "`missing_detail_names'" == "" local missing_detail_names "`this_variable'=`this_missing'个（`missing_rate_detail'%）"
+                        else local missing_detail_names "`missing_detail_names'；`this_variable'=`this_missing'个（`missing_rate_detail'%）"
+                    }
                     if missing(`max_missing_rate') | `this_missing_rate' > `max_missing_rate' {
                         local max_missing_rate = `this_missing_rate'
                         local max_missing_variable = variable[`row']
@@ -108,21 +116,44 @@ program define _journalone_append_rtf_analysis
                 local min_z = (mean[`row']-min[`row'])/sd[`row']
                 if `max_z' >= 5 | `min_z' >= 5 {
                     local ++extreme_count
-                    if !strpos(" `extreme_names' ", " `this_variable' ") & ///
-                        wordcount("`extreme_names'") < 6 local extreme_names "`extreme_names' `this_variable'"
+                    local extreme_is_new = !strpos(" `extreme_names' ", " `this_variable' ")
+                    if `extreme_is_new' & wordcount("`extreme_names'") < 6 local extreme_names "`extreme_names' `this_variable'"
+                    if `extreme_is_new' {
+                        local extreme_value_detail ""
+                        if `max_z' >= 5 {
+                            local max_detail = strtrim(string(max[`row'], "%21.`decimals'f"))
+                            local mean_detail = strtrim(string(mean[`row'], "%21.`decimals'f"))
+                            local sd_detail = strtrim(string(sd[`row'], "%21.`decimals'f"))
+                            local extreme_value_detail "`this_variable'最大值=`max_detail'（均值=`mean_detail'，SD=`sd_detail'）"
+                        }
+                        if `min_z' >= 5 {
+                            local min_detail = strtrim(string(min[`row'], "%21.`decimals'f"))
+                            local mean_detail = strtrim(string(mean[`row'], "%21.`decimals'f"))
+                            local sd_detail = strtrim(string(sd[`row'], "%21.`decimals'f"))
+                            if "`extreme_value_detail'" == "" local extreme_value_detail "`this_variable'最小值=`min_detail'（均值=`mean_detail'，SD=`sd_detail'）"
+                            else local extreme_value_detail "`extreme_value_detail'；最小值=`min_detail'"
+                        }
+                        if "`extreme_value_detail'" != "" {
+                            if "`extreme_detail_names'" == "" local extreme_detail_names "`extreme_value_detail'"
+                            else local extreme_detail_names "`extreme_detail_names'；`extreme_value_detail'"
+                        }
+                    }
                 }
             }
         }
         local zero_sd_names = strtrim("`zero_sd_names'")
         local duplicate_names = strtrim("`duplicate_names'")
         local extreme_names = strtrim("`extreme_names'")
+        local missing_detail_names = strtrim("`missing_detail_names'")
+        local extreme_detail_names = strtrim("`extreme_detail_names'")
 
         local sample_detail "结果表明，本表报告`variable_count'个变量，非缺失观测数介于`n_min_display'至`n_max_display'。"
         if `total_slots' > 0 {
             local missing_rate = 100*`total_missing'/`total_slots'
             local missing_display = strtrim(string(`missing_rate', "%9.3f"))
             local max_missing_display = strtrim(string(`max_missing_rate', "%9.3f"))
-            local missing_detail "总体缺失`total_missing'个观测，占变量-样本单元的`missing_display'%；`max_missing_variable'缺失`max_missing_count'个（`max_missing_display'），为表内最高。"
+            local missing_detail "总体缺失`total_missing'个观测，占变量-样本单元的`missing_display'%；`max_missing_variable'缺失`max_missing_count'个（`max_missing_display'%），为表内最高。"
+            if "`missing_detail_names'" != "" local missing_detail "`missing_detail'缺失分布：`missing_detail_names'"
         }
         else local missing_detail "表中没有统一总样本量，无法从当前表核对缺失规模；请先补充每个变量的总样本数。"
 
@@ -134,6 +165,7 @@ program define _journalone_append_rtf_analysis
         }
         if `extreme_count' > 0 {
             local extreme_detail "`extreme_names'的最大值或最小值距均值至少5个标准差，存在潜在极端值"
+            if "`extreme_detail_names'" != "" local extreme_detail "`extreme_detail'（`extreme_detail_names'）"
             if "`variation_detail'" == "" local variation_detail "`extreme_detail'"
             else local variation_detail "`variation_detail'；`extreme_detail'"
         }
@@ -167,6 +199,7 @@ program define _journalone_append_rtf_analysis
         }
         if `extreme_count' > 0 {
             local extreme_issue "`extreme_names'的最大值或最小值距均值至少5个标准差，存在潜在极端值"
+            if "`extreme_detail_names'" != "" local extreme_issue "`extreme_issue'（`extreme_detail_names'）"
             if "`desc_issues'" == "" local desc_issues "`extreme_issue'"
             else local desc_issues "`desc_issues'；`extreme_issue'"
             local extreme_impact "潜在极端值可能拉动均值、标准差和回归系数，影响显著性；仅凭本表不能断定这些值是错误"
@@ -195,7 +228,7 @@ program define _journalone_append_rtf_analysis
             local paragraph6 "处理建议：`desc_recommendations'。"
         }
         if `invalid_count' > 0 local paragraph6 "`paragraph6'另有`invalid_count'处统计量关系异常，先核对原始数据后再估计。"
-        local summary_text "综合结论：`missing_detail'"
+        local summary_text "`missing_detail'"
         if `duplicate_count' > 0 local summary_text "`summary_text'发现重复变量`duplicate_names'，应先去重。"
         if `extreme_count' > 0 local summary_text "`summary_text'`extreme_names'存在潜在极端值，需核验后决定是否处理。"
         if `zero_sd_count' > 0 local summary_text "`summary_text'`zero_sd_names'无变异，进入回归前应复核。"
@@ -476,7 +509,7 @@ program define _journalone_append_rtf_analysis
         if strpos("`title'", "机制") local paragraph6 "`paragraph6'机制路径应按各方程的实际系数和识别假设表述，不把单个显著中介项直接写成已证实因果机制。"
         if strpos("`title'", "内生") & (`iv_stage_count' | `heckman_stage_count') local paragraph6 "`paragraph6'多阶段结果应分别核对第一阶段/选择方程与结构方程，不能直接比较不同被解释变量的系数大小。"
 
-        local summary_text "综合结论：`paragraph2'`paragraph3'`paragraph4'"
+        local summary_text "`paragraph2'`paragraph3'`paragraph4'"
     }
 
     if "`type'" == "diagnostics" {
@@ -664,7 +697,7 @@ program define _journalone_append_rtf_analysis
         local paragraph6 "结论："
         if "`diagnostic_issues'" == "" local paragraph6 "结论：当前诊断表未显示直接的共线性或工具变量强度风险，可以进入结合理论的模型判断。"
         else local paragraph6 "结论：当前诊断表已经显示上述风险，相关模型结论应在处理或解释这些风险后再报告。"
-        local summary_text "综合结论：`paragraph2'`paragraph3'`paragraph4'"
+        local summary_text "`paragraph2'`paragraph3'`paragraph4'"
     }
 
     * Write every generated explanation as its own numbered paragraph.  The

@@ -1,4 +1,4 @@
-*! version 0.9.20 06sep2026
+*! version 0.9.21 06sep2026
 capture program drop journalone
 program define journalone, eclass
     version 16.0

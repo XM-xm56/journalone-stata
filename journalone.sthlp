@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.9.20 06sep2026}{...}
+{* *! version 0.9.21 06sep2026}{...}
 {vieweralsosee "JournalOne authorization" "help journalone_license"}{...}
 {vieweralsosee "JournalOne one-click update" "help journalone_update"}{...}
 {vieweralsosee "JournalOne preprocessing" "help journalone_prep"}{...}

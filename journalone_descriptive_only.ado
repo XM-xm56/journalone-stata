@@ -1,4 +1,4 @@
-*! version 0.9.20 06sep2026
+*! version 0.9.21 06sep2026
 
 capture program drop journalone_descriptive_only
 program define journalone_descriptive_only, rclass
